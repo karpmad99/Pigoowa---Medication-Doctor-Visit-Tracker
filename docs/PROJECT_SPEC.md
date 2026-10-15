@@ -1,6 +1,6 @@
 # Pigoowa — Project Specification
 
-> **Status:** planning. Nothing described here is implemented yet. See [ROADMAP.md](ROADMAP.md) for progress.
+> **Status:** the domain types and pure business logic described in §7 and §10.3 are implemented and tested (stage 2). There is no UI for them yet. See [ROADMAP.md](ROADMAP.md) for progress.
 
 Pigoowa is a web application for organising medications, dosage schedules, medication intake history and doctor appointments. The user interface is in Polish; code, database identifiers and technical documentation are in English.
 
@@ -44,7 +44,7 @@ AI assistant · OCR / prescription scanning · billing · family/caregiver shari
 | M-3 | Edit a medication. |
 | M-4 | **Ending a medication** (setting an end date) is the preferred, primary way to stop using it: the medication leaves today's and future schedules but its intake history is preserved. **Permanent deletion** is a secondary, clearly separated action. Its confirmation dialog must state explicitly: that the medication, its schedule **and its entire intake history will be permanently deleted**, how many history records will be lost (count), and that this cannot be undone; it offers "End medication instead" as the first alternative and requires a deliberate confirm action (not the default-focused button). |
 | M-5 | Daily schedule: one or more administration times per day (`HH:mm`), each with its own dose amount (> 0). Two entries with the same time are rejected. |
-| M-6 | Optional stock: current quantity (≥ 0), expressed **in the medication's dose unit**, recorded "as of" a moment. Updating stock resets that moment. |
+| M-6 | Optional stock: current quantity (≥ 0, at most 3 decimals) with an explicit unit (the form pre-fills the medication's dose unit), recorded "as of" a moment. Updating stock resets that moment. |
 | M-7 | Show an estimated remaining stock and days remaining **only if computable** (§7.3); otherwise show *"Szacunek niedostępny"* with the reason. |
 
 ### 4.2 Doses and intake history
@@ -111,52 +111,100 @@ Ambiguities are resolved with reasonable, **reversible** choices (IDs `DEC-xx`).
 | DEC-03 | **`scheduleEffectiveFrom`** on each medication: set to *today* whenever schedule times change. Slots are generated only for dates ≥ `max(startDate, scheduleEffectiveFrom)`. | Prevents editing today's schedule from retroactively inventing "unrecorded" doses for past days. Limitation: days before the change show only recorded doses. |
 | DEC-04 | **Dates and times are wall-clock values** (`LocalDate` = `YYYY-MM-DD`, `LocalTime` = `HH:mm`) interpreted in the user's IANA time zone. Instants (when a record was made, when an appointment starts) are UTC timestamps. | Medication times mean "08:00 where I am", also across DST changes. No date library needed: `Intl.DateTimeFormat` suffices for the zone conversions. |
 | DEC-05 | **No `doctors` table in the MVP.** Appointments store doctor name and specialty as text. | Avoids a CRUD section nobody asked for. Add a table later if reuse (doctor contact data) is needed. |
-| DEC-06 | **One dose unit per medication, dose amount per schedule time.** Stock is entered in the same unit. | Prevents unit-conversion guesses (§7.3). Example: morning 1 tabletka, evening 2 tabletki. |
+| DEC-06 | **One dose unit per medication, dose amount per schedule time.** Example: morning 1 tabletka, evening 2 tabletki. Units are never converted into each other. | Prevents unit-conversion guesses (§7.3). |
 | DEC-07 | **Dose records snapshot amount and unit** at recording time. | Later edits of a medication must not rewrite history; stock maths uses the snapshot. |
-| DEC-08 | **No i18n library.** Polish strings live in components; shared validation messages live in Zod schemas. | YAGNI for a single-language MVP. Reversible by extracting strings later. |
+| DEC-08 | **No i18n library.** Polish strings live in components; validation functions return issue codes, and the Polish messages for them are attached in the form layer (stage 5). | YAGNI for a single-language MVP. Reversible by extracting strings later. |
 | DEC-09 | **Ending a medication (end date) is the preferred option and preserves history.** Hard deletion exists as a secondary action that cascades to schedule and history, behind an explicit confirmation describing the consequences (M-4). | Intake history is valuable to the user (and to a doctor); deletion is irreversible. A hard-delete path is still needed to honour the right to erase personal data. Reversible: deletion can later be removed or replaced by archive/restore. |
 | DEC-10 | **Default time zone** comes from the browser; later stored in the user's profile (default `Europe/Warsaw`). | Poland-first, but not hard-coded. |
 | DEC-11 | **Mock data is persisted in `localStorage`** behind the same repository interface the Supabase implementation will use, with a "reset demo data" action. | Lets reviewers and E2E tests exercise real flows with reloads. localStorage is acceptable only because the data is fictional; it is not a persistence layer for real health data. |
 | DEC-12 | **TanStack Query is approved but added in stage 11** (Supabase integration), not earlier. Stages 4–10 use small custom data hooks over the repository interfaces, exposing the same `{ data, error, isLoading }` shape. | Server-state caching/invalidation/mutation handling is only really needed once data is genuinely remote. Until then it would be a dependency without a job. The hooks' shape is chosen so the later swap changes hook internals, not components. This is the only dependency outside the original list. |
 | DEC-13 | **Native `<dialog>` for modals/confirmations; no UI kit.** | Built-in focus trapping and Escape handling; fewer dependencies. Reversible with Radix/Headless UI. |
 | DEC-14 | **ID generation with `crypto.randomUUID()`** in the client for mock data; `gen_random_uuid()` in Postgres. | UUIDs avoid guessable IDs; same format both sides. |
+| DEC-15 | **Stock stores its own unit** (`MedicationStock.unit`, DB column `stock_unit`), instead of implicitly using `Medication.doseUnit`. Stock whose unit differs from the dose unit gives an *unavailable* estimate (`incompatible-units`). *(Changed in stage 2.)* | Concrete correctness problem in the original draft: if the user later edited the medication's unit (say from "tabletka" to "ml"), the stored quantity would have been silently reinterpreted in the new unit. With an explicit unit the mismatch is detected and the user must re-enter stock. Cost: one extra column; the form pre-fills it, so users rarely see it. |
+| DEC-16 | **No Zod in stage 2.** Validation is done by plain functions that return issue *codes* (`validateScheduleTimes`, `buildMedicationStock`, `validateAppointmentDraft`). Zod arrives with React Hook Form in stage 5 and wraps/reuses the same rules. *(Changed in stage 2.)* | Stage 2 was specified to add no runtime dependencies. Codes (not Polish sentences) keep the logic UI-independent; the UI maps codes to Polish messages. |
+| DEC-17 | **Three explicit dose actions instead of one "upsert".** `recordDose` creates a record (or confirms an identical one), `changeDoseStatus` changes an existing record, `undoDose` removes it. `recordDose` refuses to overwrite a record that has a different status. *(Refined in stage 2.)* | "Never silently overwrite" and stale-screen safety: if a record was undone in another tab, a late "change to skipped" click must fail with `record-not-found` instead of resurrecting it. The database-level upsert (DATABASE.md) is still how the repository stores the result. |
+| DEC-18 | **Supported calendar range is 1900–2999**; times are 24-hour `HH:mm` (`24:00` is invalid); timestamps must carry an explicit offset. | Rejects nonsense input and avoids the JavaScript `Date.UTC` two-digit-year quirk. |
+| DEC-19 | **DST policy for converting a local date and time to an instant** (only needed for appointments): a wall-clock time that does not exist is rejected (`nonexistent-time`); one that occurs twice resolves to the earlier occurrence and is flagged `ambiguousTime`. | "Reject impossible values rather than silently normalise". Medication schedule times are never converted to instants, so DST cannot move them. |
 
 ## 7. Business rules
 
 ### 7.1 Generating scheduled doses for a date
 
-Input: `medications`, `doseLogs`, `date: LocalDate`. Pure function, no clock access.
+`generateScheduledDoses({ medications, doseLogs, date })` in `features/doses/logic/scheduledDoses.ts`. Pure; no clock access; inputs are never modified; the output is deterministic.
 
-1. A medication is **active on `date`** when `startDate ≤ date`, (`endDate` is null or `date ≤ endDate`) and `date ≥ scheduleEffectiveFrom`.
-2. For each active medication, each schedule time produces one slot `(medicationId, date, time, doseAmount, doseUnit)`.
-3. A slot's **status** comes from the matching record (same medication, date and time): `taken`, `skipped`, or `unrecorded` if none.
-4. Records for that date that match no slot are returned separately as *outside current schedule* (D-9).
-5. Slots are sorted by time, then medication name.
+1. A medication is **active on `date`** when `startDate ≤ date`, (`endDate` is null or `date ≤ endDate`) and `date ≥ scheduleEffectiveFrom`. Inactive medications produce no doses.
+2. The schedule is first **normalised** (`normalizeScheduleTimes`):
+   - an entry whose amount is unusable (not a finite number > 0 with at most 3 decimals) is **skipped**;
+   - if several entries share a time of day, **one is kept: the one with the smallest `id`**. Amounts are never added together (that would invent a dose nobody configured);
+   - the result is sorted by time.
+3. Each remaining schedule time produces exactly one dose `(medicationId, date, time, doseAmount, doseUnit)`, so the same slot can never appear twice.
+4. A dose's **status** comes from the intake record with the same medication, date and time: `taken`, `skipped`, or `unrecorded` if there is none. Valid data has at most one record per slot; if corrupt data holds several, the most recently recorded one is shown (ties: highest `id`), so the output stays deterministic. Recording functions refuse to touch such a slot (§7.2).
+5. Records for `date` that match no dose are returned separately as `outsideSchedule` (D-9): the schedule changed after they were recorded, the medication ended, or it no longer exists. Days before `scheduleEffectiveFrom` therefore show only recorded history.
+6. Doses are ordered by time of day, then medication name (Polish collation, so "Cz…" sorts before "Ćm…"), then medication id. `outsideSchedule` is ordered by time, medication id, record id.
+
+**Changing a schedule** (`applyScheduleChange`): if the effective schedule really changes (a time or an amount differs; ids and order are ignored), `scheduleEffectiveFrom` becomes today, or the start date if that is later (DEC-03). If nothing changed, the same medication object is returned.
+
+**Daylight-saving time:** schedule times are wall-clock labels. A dose at `02:30` is generated exactly once on the night clocks go forward and on the night they go back (tested for 2026-03-29 and 2026-10-25 in `Europe/Warsaw`). Recording a dose never converts its time to an instant.
 
 ### 7.2 Recording a dose
 
-- Allowed only when `date ≤ today` (today computed from the injected clock and the user's time zone).
-- Idempotent *upsert* keyed by the slot identity (DEC-02). Taken → skipped overwrites the status.
-- Changing taken ↔ skipped **updates the existing record** (same slot key, so still one row).
-- "Clear" (undo) **deletes the existing record** by slot key; clearing an unrecorded slot does nothing. No path creates a second record for a slot.
-- The UI disables the buttons of a slot while its request is in flight.
+`features/doses/logic/recording.ts`. All three functions are pure: they take the current records and return the *complete new list* plus what happened (`change`: `created | updated | unchanged | removed | none`) or an error. They never write anywhere, never mutate their input, and cannot leave two records for one slot. The caller persists the result (a repository, later; a state update in the UI).
+
+| Function | Behaviour |
+|---|---|
+| `recordDose` | No record yet → **creates** one, copying the dose amount and unit as they are now (DEC-07). Same status already recorded → `unchanged` (safe to repeat, e.g. double click). **Different status already recorded → error `already-recorded`**: nothing is overwritten silently. |
+| `changeDoseStatus` | Changes taken ↔ skipped by **updating the existing record** (same id; `recordedAt` becomes now; the originally recorded amount and unit are kept). No record → error `record-not-found` (never creates). Same status → `unchanged`. |
+| `undoDose` | **Removes** the slot's record (the dose becomes unrecorded). No record → `none`: succeeds and creates nothing, so undo can be repeated. Other slots are untouched. |
+
+Shared rules:
+
+- `recordDose` and `changeDoseStatus` refuse a dose on a day **after today** (`future-date`). "Today" = the date in the user's IANA time zone at the injected `now`, so 22:30 UTC on the 15th is already the 16th in Warsaw. Undo is not date-restricted.
+- `recordDose` refuses a dose whose amount or unit is unusable (`invalid-dose`) rather than storing a misleading record.
+- Several records for one slot (impossible with the database's unique key) → `conflicting-records`; nothing is changed, because guessing which to keep or remove could destroy the wrong one.
+- The id for a new record is passed in (`newLogId`) so the function stays deterministic.
+- The UI disables a slot's buttons while its request is in flight.
 
 ### 7.3 Stock estimation
 
-Explicit assumptions (shown to the user in a help text):
+`estimateStock({ medication, doseLogs, today })` in `features/medications/logic/stock.ts`. Explicit assumptions (shown to the user in a help text):
 
-1. Stock is a number the user entered, in the **dose unit** of the medication, valid *as of* a moment (`stockAsOf`).
-2. `remaining = stockQuantity − Σ doseAmountSnapshot` over **taken** records whose `recordedAt ≥ stockAsOf`. Skipped and unrecorded doses consume nothing. (Consequence: forgetting to record a dose makes the estimate optimistic – hence "estimate".)
-3. `plannedDaily = Σ doseAmount` over the current schedule times (daily schedule only in the MVP).
+1. Stock is the quantity the user entered, in **`stock.unit`**, valid *as of* `stock.asOf` (DEC-15).
+2. `remaining = quantity − Σ doseAmount` over **taken** records of this medication whose `recordedAt ≥ asOf`. The amount is the snapshot stored in the record, not the current schedule amount. Skipped and unrecorded doses consume nothing. (Consequence: forgetting to record a dose makes the estimate optimistic – hence "estimate". Known limitation: changing a taken record to skipped and back after `asOf` moves its `recordedAt`, so a dose taken *before* the stock was entered could then be counted.)
+3. `plannedDaily = Σ doseAmount` over the normalised schedule (§7.1; daily schedule only in the MVP).
 4. `daysRemaining = floor(remaining / plannedDaily)`.
-5. Result is **unavailable** (with a reason: `no-stock`, `no-schedule`, `ended`) when stock is missing, the schedule is empty or sums to 0, or the medication has ended. `remaining` is clamped at 0.
-6. No conversion between units is ever attempted.
+5. `remaining` is clamped at 0. All arithmetic is done in whole thousandths, so decimal doses cannot drift (0.3 ÷ 0.1 is exactly 3 days, not 2).
+6. **Units are never converted.** Compared case-insensitively and ignoring surrounding/repeated spaces ("Tabletka " = "tabletka"); "mg" ≠ "ml".
 
-The 7-day highlight threshold is a named constant, not medical guidance.
+The result is a discriminated union: `{ available: true, remaining, unit, daysRemaining }` or `{ available: false, reason }`. **Zero stock is an available estimate (`remaining: 0`)**, which is different from an unavailable one. Reasons, checked in this order:
 
-### 7.4 Appointment status
+| Reason | When |
+|---|---|
+| `no-stock` | The user entered no stock. |
+| `invalid-data` | The stored quantity is negative, not finite or over-precise, or a counted record has an unusable amount. The data is not trusted and nothing is calculated. |
+| `ended` | `endDate` is before today (on the last day an estimate is still given). |
+| `no-schedule` | No usable schedule times. |
+| `incompatible-units` | Stock unit ≠ dose unit, or a counted record's unit ≠ stock unit. |
 
-- Stored status: `scheduled | completed | cancelled`. "Past" and "needs confirmation" are **derived** from `scheduledAt` and the injected `now` (A-6, A-7); the stored status changes only on user action.
+`buildMedicationStock` validates stock typed into a form (quantity ≥ 0 with at most 3 decimals and at most 9 999 999.999; unit non-blank, at most 30 characters, trimmed) and stamps it with `asOf`. `isLowStock` is true only for an *available* estimate below `LOW_STOCK_THRESHOLD_DAYS` (7); unavailable is never "low". The threshold is a display constant, not medical guidance.
+
+### 7.4 Appointments
+
+`features/appointments/logic/`.
+
+- Stored status: `scheduled | completed | cancelled`. The phase is **derived** by `classifyAppointment(appointment, now)` and never written back; the stored status changes only on user action:
+  - `upcoming`: status `scheduled` and `scheduledAt ≥ now` (an appointment starting at exactly `now` still counts as upcoming);
+  - `needs-confirmation`: status `scheduled` but `scheduledAt < now` (A-7); listed with past appointments;
+  - `past`: status `completed` or `cancelled`, whatever the time (a cancelled future appointment is "past", A-6).
+- `splitAppointments` returns `upcoming` (soonest first) and `past` (most recent first, includes `needs-confirmation`); ties are broken by id.
+- `changeAppointmentStatus` allows `scheduled → completed | cancelled` and `completed | cancelled → scheduled` (correction). Going **directly between completed and cancelled is refused** (`invalid-transition`); the same status again succeeds with `changed: false`. Date and time are never touched. Marking a not-yet-started appointment completed is allowed (not blocked; reversible).
+- `validateAppointmentDraft(draft, timeZone)` trims text (blank → `null`), requires a doctor or a specialty, checks the DATABASE length limits (120/120/200/1000), requires a real calendar date and a valid `HH:mm`, then converts date + time to an instant in the user's zone (DEC-19). It returns issue codes (`doctor-or-specialty-required`, `too-long`, `invalid-date`, `invalid-time`, `nonexistent-time`), never Polish text.
+
+### 7.5 Dates, times and instants
+
+- `LocalDate` (`YYYY-MM-DD`) and `LocalTime` (`HH:mm`) are **branded strings** produced only by `parseLocalDate` / `parseLocalTime`, which reject impossible dates (30 February, 29 February outside leap years), invalid times (`24:00`, `08:60`) and anything not in the exact format (DEC-18). The `as…` variants throw and are meant for constants and tests.
+- `Timestamp` is a UTC instant in canonical form (`2026-10-15T08:30:00.000Z`). `parseTimestamp` accepts only ISO strings with an explicit `Z` or offset (such as Postgres returns) and normalises them.
+- Calendar arithmetic (`addDays`, comparisons) works on dates only. Anything that needs a time zone (`getLocalDateInZone`, `localDateTimeToTimestamp`) lives in `utils/timeZone.ts` and uses the standard `Intl` API. No date library.
+- Business functions never read the system clock: "now" is a `Timestamp` argument and "today" is derived from it and an IANA time zone.
 
 ## 8. Technology and dependency rationale
 
@@ -190,7 +238,7 @@ Before public release: document limitations, review GDPR (health data is a speci
 - **Feature folders** keep related UI, hooks, schemas and logic together.
 - **Pure domain logic** (`logic/`) has no React or Supabase imports and is unit-tested directly.
 - **Repository interfaces** (`services/`) hide the data source. Components and hooks depend on the interface; the mock and Supabase implementations are swappable.
-- **Clock injection**: nothing in `logic/` or components calls `new Date()` directly; "now" comes from a `Clock` provided by context/arguments, so tests are deterministic.
+- **Clock injection**: nothing in `logic/` or `utils/` reads the system clock. "Now" is a `Timestamp` argument and "today" is derived from it and an IANA time zone (stage 2). The React side will supply the current time through a provider (stage 3/4), so tests can freeze it.
 - **Thin pages**: `pages/` only composes feature components for a route.
 - No global state library: React state + context for clock/repositories; server state via small custom hooks until stage 11, then TanStack Query (DEC-12).
 
@@ -209,19 +257,19 @@ pigoowa/
 │  │  │                        ConfirmDialog, Badge, Card, Spinner, EmptyState, ErrorState
 │  │  └─ layout/               AppShell, SideNav, BottomNav, PageHeader
 │  ├─ features/
-│  │  ├─ medications/          components/, hooks/, logic/ (schedule validation, stock),
-│  │  │                        schemas.ts, types.ts
-│  │  ├─ doses/                components/, hooks/, logic/ (slot generation, recording rules),
+│  │  ├─ medications/          components/, hooks/, logic/ (units, schedule, stock),
+│  │  │                        schemas.ts (stage 5), types.ts
+│  │  ├─ doses/                components/, hooks/, logic/ (slots, scheduledDoses, recording),
 │  │  │                        types.ts   — daily doses and intake history
-│  │  ├─ appointments/         components/, hooks/, logic/ (status, grouping), schemas.ts, types.ts
+│  │  ├─ appointments/         components/, hooks/, logic/ (validation, status), types.ts
 │  │  └─ dashboard/            components/ (composes the features above)
 │  ├─ hooks/                   Cross-feature hooks (e.g. useClock)
 │  ├─ lib/                     Configuration, Supabase client (later)
 │  ├─ pages/                   Route-level components
 │  ├─ services/                Repository interfaces + mock/ and supabase/ implementations
-│  ├─ test/                    Test setup, fixtures, fake clock
+│  ├─ test/                    Test setup and fixtures (builders, assertOk)
 │  ├─ types/                   Shared primitive types (Id, LocalDate, LocalTime, Timestamp)
-│  ├─ utils/                   date.ts (zone-aware), format.ts (pl-PL)
+│  ├─ utils/                   date.ts, timeZone.ts, quantity.ts; format.ts (pl-PL, stage 3+)
 │  └─ main.tsx
 └─ README.md
 ```
@@ -230,79 +278,22 @@ Deviation from the suggested layout: `doses` is its own feature because both Med
 
 Dependency direction: `pages → features → (components, hooks, services, utils, types)`. Features may import `types` from other features but not their components, except `dashboard`, which composes them.
 
-### 10.3 Draft domain types
+### 10.3 Domain types (implemented in stage 2)
 
-Primitive aliases are *branded* strings so a `LocalDate` cannot be confused with an arbitrary string.
+The code is the source of truth; this section only says where things live and what is notable.
 
-```ts
-// src/types/primitives.ts
-type Id = string;                 // UUID
-type LocalDate = string & { __brand: 'LocalDate' };   // 'YYYY-MM-DD'
-type LocalTime = string & { __brand: 'LocalTime' };   // 'HH:mm'
-type Timestamp = string;          // ISO 8601 instant, UTC
+| File | Contents |
+|---|---|
+| `src/types/primitives.ts` | `Id`, and the branded strings `LocalDate`, `LocalTime`, `Timestamp` |
+| `src/features/medications/types.ts` | `Medication`, `ScheduleTime` (the schedule *rule*), `MedicationStock` |
+| `src/features/doses/types.ts` | `DoseSlot` (medication + date + time: the uniqueness key), `DoseLog` (the *fact*), `ScheduledDose` (*derived*, never stored), `RecordedDoseStatus`, `DoseStatus` |
+| `src/features/appointments/types.ts` | `Appointment`, `AppointmentStatus` |
 
-// features/medications/types.ts
-interface Medication {
-  id: Id;
-  name: string;
-  doseUnit: string;                      // free text: 'tabletka', 'ml', ...
-  notes: string | null;
-  startDate: LocalDate;
-  endDate: LocalDate | null;
-  scheduleEffectiveFrom: LocalDate;      // DEC-03
-  scheduleTimes: ScheduleTime[];         // daily schedule (rule)
-  stock: MedicationStock | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-interface ScheduleTime { id: Id; timeOfDay: LocalTime; doseAmount: number }   // doseAmount > 0
-interface MedicationStock { quantity: number; asOf: Timestamp }              // quantity >= 0, in doseUnit
+Notable points:
 
-// features/doses/types.ts
-type RecordedDoseStatus = 'taken' | 'skipped';
-type DoseStatus = RecordedDoseStatus | 'unrecorded';
-
-interface DoseLog {                      // a FACT: what the user recorded
-  id: Id;
-  medicationId: Id;
-  scheduledDate: LocalDate;
-  scheduledTime: LocalTime;
-  status: RecordedDoseStatus;
-  doseAmount: number;                    // snapshot (DEC-07)
-  doseUnit: string;                      // snapshot (DEC-07)
-  recordedAt: Timestamp;
-}
-
-interface ScheduledDose {                // DERIVED, never stored (DEC-01)
-  medicationId: Id;
-  medicationName: string;
-  date: LocalDate;
-  time: LocalTime;
-  doseAmount: number;
-  doseUnit: string;
-  status: DoseStatus;
-  log: DoseLog | null;
-}
-
-// features/appointments/types.ts
-type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled';
-interface Appointment {
-  id: Id;
-  doctorName: string | null;
-  specialty: string | null;              // at least one of the two is non-null
-  scheduledAt: Timestamp;                // the instant it takes place
-  location: string | null;
-  notes: string | null;
-  status: AppointmentStatus;             // current state, separate from the date
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
-// Stock result: a discriminated union, so "unavailable" cannot be mistaken for a number.
-type StockEstimate =
-  | { available: true; remaining: number; unit: string; daysRemaining: number }
-  | { available: false; reason: 'no-stock' | 'no-schedule' | 'ended' };
-```
+- **Quantities** are a number plus a unit string: `ScheduleTime.doseAmount` (unit = `Medication.doseUnit`), `DoseLog.doseAmount` + `doseUnit` (a snapshot), `MedicationStock.quantity` + `unit` (DEC-15). Amounts are > 0 (doses) or ≥ 0 (stock), at most 3 decimals, at most 9 999 999.999 (matching `numeric(10,3)`); see `utils/quantity.ts`.
+- **Branded strings** were kept because they cost almost nothing (a cast in three parse functions) and stop an unvalidated string from reaching date logic. Repositories must run values from storage through the parse functions.
+- Stock estimates are a discriminated union (`StockEstimate`) so "unavailable" cannot be mistaken for a number.
 
 ### 10.4 Repository interfaces (shape only)
 
@@ -332,7 +323,7 @@ All methods are `async` (so mock and Supabase share a contract) and fail with a 
 
 ## 12. Testing strategy
 
-- **Unit (Vitest):** slot generation, stock estimation, appointment grouping/status, date utils (DST, midnight), Zod schemas.
+- **Unit (Vitest):** slot generation, stock estimation, appointment grouping/status, date utils (DST, midnight), validation functions (Zod schemas join in stage 5).
 - **Component (RTL):** forms (validation messages, no double submit), dose list actions, confirmation dialogs, empty/loading/error states.
 - **Contract tests:** repository behaviour shared by mock and Supabase implementations.
 - **E2E (Playwright):** the main journey — open dashboard → add medication → configure schedule → mark dose taken → verify history → add appointment → edit/cancel it. Uses the fixed clock (`page.clock`) and resets demo data before each test.

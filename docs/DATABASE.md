@@ -10,7 +10,7 @@ PostgreSQL via Supabase. Schema changes are made exclusively through versioned S
 2. **Appointment time ≠ appointment status.** `scheduled_at` is when it happens; `status` is its lifecycle state. "Past" is derived.
 3. **Ownership enforced by the database.** Every private table has `user_id` and RLS; child tables also reference their parent *together with* `user_id` (composite foreign key), so a row can never point at another user's parent.
 4. **Wall-clock values for schedules, instants for events.** `date` / `time` columns for schedule slots, `timestamptz` for moments.
-5. **Constraints over trust.** Validity rules (positive doses, unique slots, status values) are CHECK/UNIQUE constraints, not only Zod validation.
+5. **Constraints over trust.** Validity rules (positive doses, unique slots, status values) are CHECK/UNIQUE constraints, not only form validation.
 6. **No redundant data**, except deliberate snapshots (`dose_logs.dose_amount/dose_unit`) that preserve history.
 
 ## 2. Entity overview
@@ -58,7 +58,8 @@ Created by a trigger on `auth.users` insert (stage 11).
 | `end_date` | `date` null | `end_date >= start_date` |
 | `schedule_effective_from` | `date` not null | `>= start_date` (see PROJECT_SPEC DEC-03) |
 | `stock_quantity` | `numeric(10,3)` null | `>= 0` |
-| `stock_as_of` | `timestamptz` null | **both stock columns null or both non-null** |
+| `stock_unit` | `text` null | `char_length(btrim(stock_unit)) between 1 and 30`. Stored explicitly (not implied by `dose_unit`) so a later change of `dose_unit` cannot silently reinterpret an old quantity (PROJECT_SPEC DEC-15) |
+| `stock_as_of` | `timestamptz` null | **the three stock columns are all null or all non-null** |
 | `created_at`, `updated_at` | `timestamptz` not null default `now()` | `updated_at` maintained by trigger |
 
 Extra: `unique (id, user_id)` — target for composite foreign keys.
@@ -88,7 +89,7 @@ Only daily schedules are modelled in the MVP. Weekly/interval rules would add co
 | `scheduled_date` | `date` not null | identifies the slot |
 | `scheduled_time` | `time` not null | identifies the slot |
 | `status` | `text` not null | `check (status in ('taken','skipped'))` |
-| `dose_amount` | `numeric(10,3)` not null | `> 0`; snapshot |
+| `dose_amount` | `numeric(10,3)` not null | `> 0`; snapshot (the app also rejects more than 3 decimals and values above 9 999 999.999, matching the column) |
 | `dose_unit` | `text` not null | snapshot |
 | `recorded_at` | `timestamptz` not null default `now()` | when the user recorded it; updated on status change |
 

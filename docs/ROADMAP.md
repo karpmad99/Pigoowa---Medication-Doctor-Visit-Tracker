@@ -10,7 +10,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 |---|---|---|
 | 0 | Planning and documentation | ☑ (approved with adjustments) |
 | 1 | Project scaffold and quality tooling | ☑ |
-| 2 | Domain types and business logic | ☐ |
+| 2 | Domain types and business logic | ☑ |
 | 3 | Design foundation and app shell | ☐ |
 | 4 | Mock data layer | ☐ |
 | 5 | Medications: CRUD and schedule | ☐ |
@@ -47,12 +47,18 @@ Completion criteria:
 
 **Why now:** the riskiest part of the app is time/schedule/stock logic, not the UI. Implementing it as pure, fully tested functions first means the UI later only displays already-verified results.
 
-Scope: shared primitive types and branded date/time types; `utils/date.ts` (zone-aware "today", add days, local date/time ↔ instant, formatting for `pl-PL`); `Clock` abstraction and test fake; slot generation (§7.1); dose recording rules (§7.2); stock estimation (§7.3); appointment status/grouping (§7.4); Zod schemas for medication, schedule and appointment forms. **No UI.**
+Scope (as implemented): shared primitive types and branded date/time types; `utils/date.ts` (strict parsing, calendar arithmetic, instants), `utils/timeZone.ts` (zone-aware "today", local date/time → instant with a documented DST policy), `utils/quantity.ts`; dose generation (§7.1); record / change / undo of intake records (§7.2); stock estimation (§7.3); appointment validation, phase and status handling (§7.4); schedule and stock validation. **No UI, no new dependencies.**
+
+Changes against the original scope (see PROJECT_SPEC DEC-15 to DEC-19):
+- **Zod schemas moved to stage 5.** Stage 2 adds no runtime dependency, so validation is done by plain functions returning issue codes; the stage 5 schemas will reuse these rules.
+- **No `Clock` abstraction yet.** Business functions take `now` / `today` as arguments. A React-side provider for the current time belongs with the UI stages (3/4).
+- **`pl-PL` formatting (`utils/format.ts`) moved to stage 3**, where the first screens need it.
+- **Stock got an explicit unit** (DEC-15) and the dose actions are three explicit functions instead of one upsert (DEC-17).
 
 Completion criteria:
-- [ ] Unit tests cover: once/multiple daily doses; start/end date boundaries; `scheduleEffectiveFrom`; taken vs skipped vs unrecorded; orphan logs; future-date rejection; duplicate action idempotency; stock available/unavailable cases; DST days 2026-03-29 and 2026-10-25 in `Europe/Warsaw`; midnight boundaries; appointment upcoming/past/needs-confirmation; schema validation messages.
-- [ ] No `any`; no React or Supabase imports in `logic/` or `utils/`.
-- [ ] All standard checks pass.
+- [x] Unit tests cover: once/multiple daily doses; start/end date boundaries; `scheduleEffectiveFrom`; taken vs skipped vs unrecorded; orphan logs; future-date rejection; duplicate action idempotency; stock available/unavailable cases; DST days 2026-03-29 and 2026-10-25 in `Europe/Warsaw`; midnight boundaries; appointment upcoming/past/needs-confirmation; validation issue codes (the originally listed "schema validation messages" move to stage 5 with Zod).
+- [x] No `any`; no React, Supabase, storage or system-clock access in `logic/`, `utils/` or `types/` (checked with a search, and enforced for `any` by the lint rules).
+- [x] All standard checks pass (results in the stage 2 report).
 
 ## Stage 3 — Design foundation and app shell
 
@@ -78,7 +84,7 @@ Completion criteria:
 
 ## Stage 5 — Medications: CRUD and schedule
 
-Scope: medications list page with empty state; add/edit form (React Hook Form + Zod) including schedule-time editor and optional stock; **"end medication" as the primary way to stop a medication (history preserved)**; permanent deletion as a secondary action whose confirmation dialog explicitly states the consequences (M-4).
+Scope: Zod schemas wrapping the stage 2 validation rules (with Polish messages for the issue codes); medications list page with empty state; add/edit form (React Hook Form + Zod) including schedule-time editor and optional stock; **"end medication" as the primary way to stop a medication (history preserved)**; permanent deletion as a secondary action whose confirmation dialog explicitly states the consequences (M-4).
 
 Completion criteria:
 - [ ] Add, edit, delete work against the mock repository; state survives reload.

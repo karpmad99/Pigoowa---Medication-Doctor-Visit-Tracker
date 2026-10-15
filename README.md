@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 1 of 12 complete (project scaffold).** The app currently consists of an application shell with navigation between three placeholder pages (Pulpit, Leki, Wizyty). None of the features below exist yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 2 of 12 complete (project scaffold + domain logic).** The app itself is still an application shell with navigation between three placeholder pages (Pulpit, Leki, Wizyty); none of the features below are usable yet. Under the hood, the tested business logic for schedules, dose generation, intake records, stock estimates and appointments exists (`src/features/*/logic`, `src/utils`), but nothing displays it yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -82,7 +82,11 @@ Install the browser once with `npx playwright install chromium`. If you already 
 src/app/                 Route definitions
 src/components/layout/   Application shell and shared layout pieces
 src/pages/               One thin component per route
-src/test/                Test setup
+src/features/            Domain types and pure business logic, one folder per feature
+                         (medications, doses, appointments); no UI yet
+src/types/               Shared primitive types (LocalDate, LocalTime, Timestamp, Id)
+src/utils/               Date, time-zone and quantity helpers
+src/test/                Test setup and fixtures
 e2e/                     Playwright tests
 docs/                    Specification, roadmap, database design
 ```
