@@ -11,7 +11,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 0 | Planning and documentation | ☑ (approved with adjustments) |
 | 1 | Project scaffold and quality tooling | ☑ |
 | 2 | Domain types and business logic | ☑ |
-| 3 | Design foundation and app shell | ☐ |
+| 3 | Design foundation and app shell | ☑ |
 | 4 | Mock data layer | ☐ |
 | 5 | Medications: CRUD and schedule | ☐ |
 | 6 | Daily doses, history and stock | ☐ |
@@ -64,12 +64,14 @@ Completion criteria:
 
 Scope: Tailwind design tokens (calm palette, typography, spacing, radius), `components/ui` primitives (Button, Field/Input/Select/Textarea, Badge, Card, Spinner, EmptyState, ErrorState, native-`<dialog>` Dialog and ConfirmDialog), responsive `AppShell` (sidebar on desktop, bottom nav on mobile), page headers, safety note component, a temporary internal page showing the primitives.
 
+As delivered: all of the above, plus `utils/format.ts` (`pl-PL` date, time-stamp and number formatting, moved here from stage 2), a `usePageTitle` hook and a few inline SVG icons (no icon library). The temporary primitives page is at `/dev/components` and exists **only in development builds** (it is removed from production bundles). The Pulpit, Leki and Wizyty pages are still placeholders: they have the final page header and say plainly that their content is not built yet, with no fake controls. Their real content belongs to stages 5 to 8 and needs the stage 4 data layer, so none of it was started.
+
 Completion criteria:
-- [ ] Layout works at 360 px, tablet and desktop widths (checked in a browser with screenshots).
-- [ ] Keyboard-only navigation works; focus is visible; dialogs trap focus and close on Escape.
-- [ ] Component tests for Button states, Field label/error association, ConfirmDialog confirm/cancel.
-- [ ] Contrast of text/background token pairs verified (≥ 4.5:1).
-- [ ] All standard checks pass.
+- [x] Layout works at 360 px, tablet and desktop widths. Looked at in a real browser with screenshots at 390 px, 768 px and 1280 px; 360 px, 767 px and the other widths are covered by automated browser checks (no horizontal scrolling on every page, bottom bar vs. sidebar switch exactly at 768 px, touch targets, nothing hidden behind the bottom bar), not by eye.
+- [x] Keyboard-only navigation works; focus is visible; dialogs keep focus away from the page behind them and close on Escape. Verified in Chromium: the skip link is the first stop and moves focus to the content; the page behind an open dialog is inert; Tab cycles through the dialog's own controls and may make one stop outside the page (the browser's own interface) before re-entering, which is how the native `<dialog>` behaves; Escape closes and returns focus to the opener.
+- [x] Component tests for Button states, Field label/error association, ConfirmDialog confirm/cancel (plus Dialog, feedback components, shell landmarks, page titles, formatting). jsdom cannot trap focus or react to Escape, so those two behaviours are tested in Playwright, not in unit tests.
+- [x] Contrast of text/background token pairs verified (≥ 4.5:1 for text, ≥ 3:1 for borders, focus ring and accents). The test reads the colours from `src/index.css`, so it re-checks them whenever they change.
+- [x] All standard checks pass (results in the stage 3 report).
 
 ## Stage 4 — Mock data layer
 

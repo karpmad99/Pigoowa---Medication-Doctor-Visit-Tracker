@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 2 of 12 complete (project scaffold + domain logic).** The app itself is still an application shell with navigation between three placeholder pages (Pulpit, Leki, Wizyty); none of the features below are usable yet. Under the hood, the tested business logic for schedules, dose generation, intake records, stock estimates and appointments exists (`src/features/*/logic`, `src/utils`), but nothing displays it yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 3 of 12 complete (scaffold, domain logic, design foundation).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones) with a design system of reusable components. The three sections (Pulpit, Leki, Wizyty) are still placeholders that say their content is not built yet; none of the features below are usable. The tested business logic for schedules, dose generation, intake records, stock estimates and appointments exists (`src/features/*/logic`, `src/utils`), but nothing displays it yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -72,6 +72,10 @@ No environment variables are needed yet.
 
 Install the browser once with `npx playwright install chromium`. If you already have a Chromium binary, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its path instead.
 
+### Component preview (development only)
+
+While developing (`npm run dev`), `/dev/components` shows every UI component in use, including the dialogs and a sample form. The page is not included in production builds and will be deleted once real screens use the components.
+
 ### Continuous integration
 
 `.github/workflows/ci.yml` runs typecheck, lint, format check, unit tests, build and e2e tests on every pull request and push to `main`. *(The workflow file exists; it has not yet been observed running on GitHub.)*
@@ -80,8 +84,11 @@ Install the browser once with `npx playwright install chromium`. If you already 
 
 ```
 src/app/                 Route definitions
-src/components/layout/   Application shell and shared layout pieces
+src/components/ui/       Design-system components (Button, FormField, Dialog, ...)
+src/components/layout/   Application shell, page header, safety note
+src/hooks/               Shared React hooks (page title)
 src/pages/               One thin component per route
+src/index.css            Design tokens (colours, fonts, radii)
 src/features/            Domain types and pure business logic, one folder per feature
                          (medications, doses, appointments); no UI yet
 src/types/               Shared primitive types (LocalDate, LocalTime, Timestamp, Id)

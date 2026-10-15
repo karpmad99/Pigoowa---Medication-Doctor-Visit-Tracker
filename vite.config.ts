@@ -12,5 +12,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Vitest replaces every CSS import with an empty string, including `?raw` ones. The design
+    // token test needs the real text of index.css, so only that file is let through.
+    css: { include: [/index\.css/] },
   },
 });

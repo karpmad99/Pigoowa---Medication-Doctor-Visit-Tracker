@@ -1,13 +1,24 @@
+import { EmptyState } from '@/components/ui/EmptyState';
+import type { IconName } from '@/components/ui/Icon';
+import { PageHeader } from './PageHeader';
+
 interface PlaceholderPageProps {
   title: string;
   description: string;
+  icon: IconName;
+  /** What will appear here, in plain words. */
+  upcoming: string;
 }
 
-export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
+/**
+ * A section whose content is built in a later stage. It says so plainly and offers no fake
+ * controls; the real page replaces this component.
+ */
+export function PlaceholderPage({ title, description, icon, upcoming }: PlaceholderPageProps) {
   return (
-    <section>
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      <p className="mt-2 text-slate-600">{description}</p>
-    </section>
+    <>
+      <PageHeader title={title} description={description} />
+      <EmptyState icon={icon} title="Ta sekcja jest jeszcze w budowie" description={upcoming} />
+    </>
   );
 }
