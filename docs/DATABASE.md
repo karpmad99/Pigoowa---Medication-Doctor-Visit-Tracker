@@ -92,7 +92,7 @@ Only daily schedules are modelled in the MVP. Weekly/interval rules would add co
 | `dose_unit` | `text` not null | snapshot |
 | `recorded_at` | `timestamptz` not null default `now()` | when the user recorded it; updated on status change |
 
-`unique (medication_id, scheduled_date, scheduled_time)` — **one record per slot**; this is what makes repeated actions idempotent (via `insert … on conflict … do update`).
+`unique (medication_id, scheduled_date, scheduled_time)` — **one record per slot**; this is what makes repeated actions idempotent (via `insert … on conflict … do update`). Undo deletes the row by the same slot key, so it can never leave a duplicate behind.
 Indexes: `(user_id, scheduled_date)`, `(medication_id, scheduled_date)`.
 
 There is deliberately **no foreign key to `medication_schedule_times`**: schedule times may be edited or removed while history must remain. A log with no matching current slot is displayed as "outside current schedule".
@@ -130,7 +130,8 @@ A separate `doctors` table is **not** part of the MVP (PROJECT_SPEC DEC-05).
 | Action | Effect |
 |---|---|
 | Delete account (`auth.users` row) | cascades to `profiles` and every table below it: all user data is erased |
-| Delete medication | cascades to its schedule times and dose logs (user is warned) |
+| End medication (set `end_date`) | **preferred**; nothing is deleted, history is preserved |
+| Delete medication | permanent; cascades to its schedule times and dose logs. The UI must state this explicitly and show how many history records will be lost (PROJECT_SPEC M-4) |
 | Edit schedule times | replaces `medication_schedule_times` rows; **dose logs are untouched** |
 | Delete appointment | row removed |
 

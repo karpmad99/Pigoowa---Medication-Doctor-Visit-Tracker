@@ -42,7 +42,7 @@ AI assistant · OCR / prescription scanning · billing · family/caregiver shari
 | M-1 | List all the user's medications. Empty state with a call to action. |
 | M-2 | Add a medication: name (required), dose unit (required, free text with suggestions, e.g. *tabletka, ml, mg, kropla*), notes (optional), start date (default today), end date (optional). |
 | M-3 | Edit a medication. |
-| M-4 | Delete a medication after an explicit confirmation that states that its intake history will also be deleted. Ending a medication (setting an end date) is offered as the non-destructive alternative. |
+| M-4 | **Ending a medication** (setting an end date) is the preferred, primary way to stop using it: the medication leaves today's and future schedules but its intake history is preserved. **Permanent deletion** is a secondary, clearly separated action. Its confirmation dialog must state explicitly: that the medication, its schedule **and its entire intake history will be permanently deleted**, how many history records will be lost (count), and that this cannot be undone; it offers "End medication instead" as the first alternative and requires a deliberate confirm action (not the default-focused button). |
 | M-5 | Daily schedule: one or more administration times per day (`HH:mm`), each with its own dose amount (> 0). Two entries with the same time are rejected. |
 | M-6 | Optional stock: current quantity (≥ 0), expressed **in the medication's dose unit**, recorded "as of" a moment. Updating stock resets that moment. |
 | M-7 | Show an estimated remaining stock and days remaining **only if computable** (§7.3); otherwise show *"Szacunek niedostępny"* with the reason. |
@@ -54,7 +54,7 @@ AI assistant · OCR / prescription scanning · billing · family/caregiver shari
 | D-1 | For any selected day, show the scheduled doses generated from the schedule rules (§7.1). Default day: today. |
 | D-2 | Mark a dose as **taken** or **skipped**. Both are recorded; the two are visually and semantically distinct. |
 | D-3 | A dose with no record is **unrecorded** (*"Nie zapisano"*). The app never infers "taken". |
-| D-4 | A recorded dose can be changed (taken ↔ skipped) or cleared (back to unrecorded) to correct mistakes. |
+| D-4 | Undo/correction: a recorded dose can be changed (taken ↔ skipped), which **updates the existing record**, or cleared (back to unrecorded), which **deletes that same record**. Neither action ever creates a second record for the slot. Clearing an already-unrecorded slot is a harmless no-op. |
 | D-5 | Marking a dose never modifies the schedule rules or any other day. |
 | D-6 | Doses on future days cannot be recorded. Today and past days can. |
 | D-7 | Repeating the same action (double click, duplicate request) results in exactly one record per dose. |
@@ -114,10 +114,10 @@ Ambiguities are resolved with reasonable, **reversible** choices (IDs `DEC-xx`).
 | DEC-06 | **One dose unit per medication, dose amount per schedule time.** Stock is entered in the same unit. | Prevents unit-conversion guesses (§7.3). Example: morning 1 tabletka, evening 2 tabletki. |
 | DEC-07 | **Dose records snapshot amount and unit** at recording time. | Later edits of a medication must not rewrite history; stock maths uses the snapshot. |
 | DEC-08 | **No i18n library.** Polish strings live in components; shared validation messages live in Zod schemas. | YAGNI for a single-language MVP. Reversible by extracting strings later. |
-| DEC-09 | **Medication deletion is a hard delete** (cascades to schedule and history) after strong confirmation. Archiving = setting an end date. | Right to delete personal data is simplest to honour. Archive/restore can be added if users want it. |
+| DEC-09 | **Ending a medication (end date) is the preferred option and preserves history.** Hard deletion exists as a secondary action that cascades to schedule and history, behind an explicit confirmation describing the consequences (M-4). | Intake history is valuable to the user (and to a doctor); deletion is irreversible. A hard-delete path is still needed to honour the right to erase personal data. Reversible: deletion can later be removed or replaced by archive/restore. |
 | DEC-10 | **Default time zone** comes from the browser; later stored in the user's profile (default `Europe/Warsaw`). | Poland-first, but not hard-coded. |
 | DEC-11 | **Mock data is persisted in `localStorage`** behind the same repository interface the Supabase implementation will use, with a "reset demo data" action. | Lets reviewers and E2E tests exercise real flows with reloads. localStorage is acceptable only because the data is fictional; it is not a persistence layer for real health data. |
-| DEC-12 | **Server-state library (TanStack Query) is a *proposed* addition**, to be confirmed in stage 4. | Needed for loading/error/mutation/invalidated-cache handling once data is async; hand-rolling this is error-prone. Alternative: small custom hooks. This is the only dependency outside your list, so it needs your approval. |
+| DEC-12 | **TanStack Query is approved but added in stage 11** (Supabase integration), not earlier. Stages 4–10 use small custom data hooks over the repository interfaces, exposing the same `{ data, error, isLoading }` shape. | Server-state caching/invalidation/mutation handling is only really needed once data is genuinely remote. Until then it would be a dependency without a job. The hooks' shape is chosen so the later swap changes hook internals, not components. This is the only dependency outside the original list. |
 | DEC-13 | **Native `<dialog>` for modals/confirmations; no UI kit.** | Built-in focus trapping and Escape handling; fewer dependencies. Reversible with Radix/Headless UI. |
 | DEC-14 | **ID generation with `crypto.randomUUID()`** in the client for mock data; `gen_random_uuid()` in Postgres. | UUIDs avoid guessable IDs; same format both sides. |
 
@@ -137,7 +137,8 @@ Input: `medications`, `doseLogs`, `date: LocalDate`. Pure function, no clock acc
 
 - Allowed only when `date ≤ today` (today computed from the injected clock and the user's time zone).
 - Idempotent *upsert* keyed by the slot identity (DEC-02). Taken → skipped overwrites the status.
-- "Clear" deletes the record.
+- Changing taken ↔ skipped **updates the existing record** (same slot key, so still one row).
+- "Clear" (undo) **deletes the existing record** by slot key; clearing an unrecorded slot does nothing. No path creates a second record for a slot.
 - The UI disables the buttons of a slot while its request is in flight.
 
 ### 7.3 Stock estimation
@@ -171,7 +172,7 @@ The 7-day highlight threshold is a named constant, not medical guidance.
 | Vitest, React Testing Library, jsdom | Unit and component tests. |
 | Playwright | End-to-end tests. |
 | ESLint (typescript-eslint, react-hooks, jsx-a11y), Prettier | Static analysis and formatting. |
-| *(proposed)* TanStack Query | Async state (DEC-12). |
+| *(stage 11)* TanStack Query | Server state for Supabase data: caching, invalidation, mutations (DEC-12). Not installed before then. |
 
 Versions: the latest mutually compatible stable releases at the time of stage 1, pinned by the lockfile; exact versions are recorded in the README.
 
@@ -191,7 +192,7 @@ Before public release: document limitations, review GDPR (health data is a speci
 - **Repository interfaces** (`services/`) hide the data source. Components and hooks depend on the interface; the mock and Supabase implementations are swappable.
 - **Clock injection**: nothing in `logic/` or components calls `new Date()` directly; "now" comes from a `Clock` provided by context/arguments, so tests are deterministic.
 - **Thin pages**: `pages/` only composes feature components for a route.
-- No global state library: React state + context for clock/repositories; server state per DEC-12.
+- No global state library: React state + context for clock/repositories; server state via small custom hooks until stage 11, then TanStack Query (DEC-12).
 
 ### 10.2 Directory structure
 

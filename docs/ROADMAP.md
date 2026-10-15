@@ -8,8 +8,8 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 
 | # | Stage | Status |
 |---|---|---|
-| 0 | Planning and documentation | ☑ (awaiting approval) |
-| 1 | Project scaffold and quality tooling | ☐ |
+| 0 | Planning and documentation | ☑ (approved with adjustments) |
+| 1 | Project scaffold and quality tooling | ☑ |
 | 2 | Domain types and business logic | ☐ |
 | 3 | Design foundation and app shell | ☐ |
 | 4 | Mock data layer | ☐ |
@@ -33,15 +33,15 @@ Done when: you have reviewed the plan and approved (or changed) the decisions in
 
 **Why first:** every later stage depends on automated checks. Having `typecheck`/`lint`/`test`/`build`/`e2e` working on an almost empty app means every following change is verified from its first commit, and the toolchain choices (TypeScript strictness, Tailwind, Router, test runners) are settled while it is cheap to change them.
 
-Scope: Vite + React + TypeScript (strict), Tailwind CSS, React Router with placeholder routes (`/`, `/medications`, `/appointments`), ESLint (typescript-eslint, react-hooks, jsx-a11y), Prettier, Vitest + React Testing Library, Playwright with one smoke test, npm scripts, `.gitignore`, `.env.example` (no secrets), GitHub Actions workflow running the checks, README setup section.
+Scope (kept deliberately minimal): Vite + React + TypeScript (strict), Tailwind CSS, React Router with placeholder routes (`/`, `/medications`, `/appointments`), ESLint (typescript-eslint, react-hooks, jsx-a11y), Prettier, Vitest + React Testing Library, Playwright with one smoke test, npm scripts, `.gitignore`, one GitHub Actions workflow running the checks, README setup section. No `.env.example` yet (there is no configuration to put in it until stage 11), no data libraries, no UI kit.
 
 Completion criteria:
-- [ ] `npm run dev` serves a placeholder app in Polish with working navigation between three routes.
-- [ ] `npm run typecheck`, `lint`, `format:check`, `test`, `build` and `e2e` all pass; results reported verbatim.
-- [ ] `tsconfig` has `strict: true`; no lint rules disabled.
-- [ ] At least one component test and one Playwright smoke test exist and pass.
-- [ ] CI runs the same checks.
-- [ ] Dependency list matches PROJECT_SPEC §8; versions recorded.
+- [x] `npm run dev` serves a placeholder app in Polish with working navigation between three routes.
+- [x] `npm run typecheck`, `lint`, `format:check`, `test`, `build` and `e2e` all pass; results reported verbatim.
+- [x] `tsconfig` has `strict: true`; no lint rules disabled.
+- [x] At least one component test and one Playwright smoke test exist and pass.
+- [x] CI workflow runs the same checks (written; **not yet observed running on GitHub** — confirm on the first pull request).
+- [x] Dependency list matches PROJECT_SPEC §8 (without TanStack Query); versions recorded in README.
 
 ## Stage 2 — Domain types and business logic
 
@@ -67,7 +67,7 @@ Completion criteria:
 
 ## Stage 4 — Mock data layer
 
-Scope: repository interfaces; `localStorage` implementations with fictional seed data and a reset action; providers (clock, repositories); data hooks (with TanStack Query *if approved*, DEC-12); repository contract tests written so they can later run against Supabase.
+Scope: repository interfaces; `localStorage` implementations with fictional seed data and a reset action; providers (clock, repositories); small custom data hooks returning `{ data, error, isLoading }` (TanStack Query is deliberately **not** used yet — DEC-12, added in stage 11); repository contract tests written so they can later run against Supabase.
 
 Completion criteria:
 - [ ] Contract tests pass for all repositories (create/read/update/delete, uniqueness of dose logs, error cases).
@@ -78,12 +78,13 @@ Completion criteria:
 
 ## Stage 5 — Medications: CRUD and schedule
 
-Scope: medications list page with empty state; add/edit form (React Hook Form + Zod) including schedule-time editor and optional stock; delete with confirmation text about history deletion; "end medication" action.
+Scope: medications list page with empty state; add/edit form (React Hook Form + Zod) including schedule-time editor and optional stock; **"end medication" as the primary way to stop a medication (history preserved)**; permanent deletion as a secondary action whose confirmation dialog explicitly states the consequences (M-4).
 
 Completion criteria:
 - [ ] Add, edit, delete work against the mock repository; state survives reload.
 - [ ] Form validation tested (required fields, positive dose, duplicate times, end ≥ start, stock ≥ 0); errors announced accessibly.
 - [ ] Double submit creates one medication (tested).
+- [ ] Ending a medication keeps its history (tested); the delete dialog names the consequences, shows the number of history records to be lost, and offers "end instead" (tested).
 - [ ] Changing schedule times sets `scheduleEffectiveFrom` (tested).
 - [ ] Loading, empty and error states tested.
 - [ ] All standard checks pass.
@@ -94,6 +95,7 @@ Scope: day view with date selector; dose rows with taken / skipped / clear actio
 
 Completion criteria:
 - [ ] Marking taken/skipped/clear works and never alters schedules or other days (tested).
+- [ ] Undo updates or removes the existing record and never creates a duplicate; repeated undo is a no-op (tested at logic, repository and UI level).
 - [ ] Future days cannot be recorded (tested).
 - [ ] Repeated clicks produce a single record (tested); buttons disabled while pending.
 - [ ] History shows snapshot amount/unit, even after the medication is edited (tested).
@@ -147,7 +149,7 @@ Completion criteria:
 
 ## Stage 11 — Authentication and Supabase persistence
 
-Scope: Supabase client (public URL + anon key only), sign up / sign in / sign out, protected routes, profile creation, Supabase repository implementations passing the same contract tests as the mocks, switchable by configuration; account-specific data; demo mode remains available.
+Scope: Supabase client (public URL + anon key only), **TanStack Query** replacing the custom data hooks' internals (DEC-12), `.env.example` with the public variables, sign up / sign in / sign out, protected routes, profile creation, Supabase repository implementations passing the same contract tests as the mocks, switchable by configuration; account-specific data; demo mode remains available.
 
 Completion criteria:
 - [ ] Repository contract tests pass against both implementations.
