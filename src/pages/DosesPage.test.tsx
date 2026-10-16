@@ -592,6 +592,36 @@ describe('day view: repeated clicks and pending writes', () => {
     expect(await taken('Demoxal', '20:00')).toBeEnabled();
   });
 
+  it('a second click that arrives before the screen re-renders is ignored and does not switch the progress indicator off', async () => {
+    const services = createTestServices();
+    await seed(services, { id: 'm-1', name: 'Demoxal' });
+    const gate = createDeferred<undefined>();
+    const upsert = services.repositories.doseLogs.upsert.bind(services.repositories.doseLogs);
+    const spy = vi
+      .spyOn(services.repositories.doseLogs, 'upsert')
+      .mockImplementation(async (entry) => {
+        await gate.promise;
+        return upsert(entry);
+      });
+    renderApp(services);
+    const first = await taken('Demoxal', '08:00');
+
+    // Both clicks reach the handler in the same tick, before React could disable the button.
+    act(() => {
+      first.click();
+      first.click();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(first).toHaveAttribute('aria-busy', 'true');
+    expect(first).toBeDisabled();
+    gate.resolve(undefined);
+    expect(await screen.findByText('Zapisano jako przyjętą: Demoxal, 08:00.')).toBeVisible();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
   it('is not disturbed when the day is changed while a write is pending', async () => {
     const user = userEvent.setup();
     const services = createTestServices();

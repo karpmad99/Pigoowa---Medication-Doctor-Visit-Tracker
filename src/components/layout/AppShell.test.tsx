@@ -132,27 +132,16 @@ describe('page titles', () => {
 });
 
 describe('section pages', () => {
-  // `/medications` and `/appointments` are no longer placeholders: stages 5 and 7 replaced them
-  // with the real screens (see src/pages/MedicationsPage.test.tsx and AppointmentsPage.test.tsx).
-  // The sections still to be built are listed here.
-  it.each([['/', 'Pulpit']])(
-    '%s says plainly that its content is not built yet and offers no fake controls',
-    (path, title) => {
+  // Every section is a real screen now (stages 5 to 8); there are no placeholder pages left. Their
+  // own tests are in src/pages/.
+  it.each(['/', '/doses', '/medications', '/appointments'])(
+    '%s has a single level-one heading',
+    async (path) => {
       renderAppAt(path);
 
-      expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
-      expect(
-        screen.getByRole('heading', { level: 2, name: 'Ta sekcja jest jeszcze w budowie' }),
-      ).toBeInTheDocument();
-      expect(within(screen.getByRole('main')).queryAllByRole('button')).toHaveLength(0);
+      expect(await screen.findAllByRole('heading', { level: 1 })).toHaveLength(1);
     },
   );
-
-  it('has a single level-one heading per page', () => {
-    renderAppAt('/medications');
-
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-  });
 });
 
 describe('development-only component preview', () => {

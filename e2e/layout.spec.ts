@@ -86,8 +86,9 @@ test.describe('phone layout: navigation along the bottom edge', () => {
   test('a short page neither scrolls needlessly nor hides its footer behind the bar', async ({
     page,
   }) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1, name: 'Pulpit' })).toBeVisible();
+    // The dashboard is a long page now; the not-found page is a short one.
+    await page.goto('/nie-ma-takiej-strony');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     const scrolls = await page.evaluate(
       () => document.documentElement.scrollHeight > document.documentElement.clientHeight,

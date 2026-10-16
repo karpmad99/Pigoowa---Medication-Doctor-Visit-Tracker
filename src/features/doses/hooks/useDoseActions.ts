@@ -74,9 +74,10 @@ export function useDoseActions({ onRefresh }: { onRefresh: () => void }) {
           createId,
         });
       });
-      setPending(null);
-
+      // An ignored click (a write is already running) must not clear that write's progress
+      // indicator, so the pending state is only cleared by the run that set it.
       if (outcome.status === 'ignored') return 'ignored';
+      setPending(null);
 
       if (outcome.status === 'failed') {
         setFeedback({

@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/Button';
 import { ButtonLink } from '@/components/ui/ButtonLink';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -9,8 +8,9 @@ import { Icon } from '@/components/ui/Icon';
 import { Spinner } from '@/components/ui/Spinner';
 import { DaySelector } from '@/features/doses/components/DaySelector';
 import { IntakeRecordItem } from '@/features/doses/components/IntakeRecordItem';
-import { ScheduledDoseRow, type FocusRequest } from '@/features/doses/components/ScheduledDoseRow';
-import { useDoseActions } from '@/features/doses/hooks/useDoseActions';
+import { DoseFeedbackMessage } from '@/features/doses/components/DoseFeedbackMessage';
+import { ScheduledDoseRow } from '@/features/doses/components/ScheduledDoseRow';
+import { useDoseListActions } from '@/features/doses/hooks/useDoseListActions';
 import { useDoseLogs } from '@/features/doses/hooks/useDoseLogs';
 import { summarizeDay } from '@/features/doses/logic/daySummary';
 import { findOutsideScheduleReasons } from '@/features/doses/logic/history';
@@ -52,8 +52,7 @@ export function DosesPage() {
   // All records, once. The day's records, the stock estimates and (after a write) the refreshed
   // list all come from this one answer, so changing the day never has a stale request to race.
   const doseLogs = useDoseLogs(EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE, { keepDataOnReload: true });
-  const actions = useDoseActions({ onRefresh: doseLogs.reload });
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const actions = useDoseListActions({ onRefresh: doseLogs.reload });
 
   const medicationList = medications.data;
   const logList = doseLogs.data;
@@ -85,20 +84,6 @@ export function DosesPage() {
   const loadError = medications.error ?? doseLogs.error;
   const isLoading = medications.isLoading || doseLogs.isLoading;
 
-  const handleAction = (
-    dose: Parameters<typeof actions.perform>[0],
-    target: Parameters<typeof actions.perform>[1],
-  ) => {
-    void actions.perform(dose, target).then((result) => {
-      if (result === 'done') {
-        setFocusRequest((previous) => ({
-          slotKey: doseSlotKey(dose),
-          sequence: (previous?.sequence ?? 0) + 1,
-        }));
-      }
-    });
-  };
-
   const summary = day === null ? null : summarizeDay(day.doses);
   const medicationsOfDay =
     day === null || medicationList === undefined
@@ -128,27 +113,7 @@ export function DosesPage() {
           </p>
         )}
 
-        <div role="status" aria-live="polite">
-          {actions.feedback?.kind === 'success' && (
-            <p className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-card border border-success-800 bg-success-50 p-4 text-success-800">
-              <Icon name="check" className="mt-0.5" />
-              <span className="min-w-0 flex-1 basis-48 font-medium">
-                {actions.feedback.message}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="-my-1 text-success-800"
-                onClick={actions.dismissFeedback}
-              >
-                Zamknij komunikat
-              </Button>
-            </p>
-          )}
-        </div>
-        {actions.feedback?.kind === 'error' && (
-          <ErrorState title={actions.feedback.title} message={actions.feedback.message} />
-        )}
+        <DoseFeedbackMessage feedback={actions.feedback} onDismiss={actions.dismissFeedback} />
 
         {!canRecord && (
           <p className="flex items-start gap-3 rounded-card border border-line bg-surface p-4 text-ink-muted">
@@ -207,8 +172,8 @@ export function DosesPage() {
                       isBusy={actions.pending !== null || doseLogs.isRefreshing}
                       canRecord={canRecord}
                       timeZone={timeZone}
-                      focusRequest={focusRequest}
-                      onAction={handleAction}
+                      focusRequest={actions.focusRequest}
+                      onAction={actions.handleAction}
                     />
                   ))}
                 </ul>

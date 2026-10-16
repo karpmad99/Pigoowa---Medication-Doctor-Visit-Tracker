@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 7 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). Only Pulpit (Dashboard) is still a placeholder. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 8 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -112,7 +112,7 @@ A reset first copies whatever is stored, even damaged data, to the backup key, s
 
 **Running the repository contract tests.** `npm test` runs everything. To run only the data layer: `npx vitest run src/services`. The contract (`src/services/contract/repositoryContract.ts`) describes behaviour every implementation must have and knows nothing about `localStorage`; `src/services/local/localRepositories.test.ts` runs it against the browser-storage implementation, and the Supabase implementation of stage 11 is meant to run the same suite. Tests use a controllable fake storage (`src/test/fakeStorage.ts`) instead of the real one.
 
-**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); the dashboard screen (stage 8); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
+**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
 
 ### Medications (stage 5)
 
@@ -144,6 +144,16 @@ Routes: `/appointments` (the list; `?tab=past` for the Past tab), `/appointments
 - **Add / edit**: a date and a time are required, and so is a doctor or a specialty (one of them is enough); place and notes are optional. A time that does not exist on a clock-change day is refused; a time that happens twice is flagged and saved as the earlier one. Input is kept when validation or saving fails; a double submit creates one appointment.
 - **Status** can be changed and corrected (*Przywróć jako zaplanowaną*); completed ↔ cancelled goes through "scheduled". **Delete** is *Usuń trwale…*, behind a confirmation that says it is permanent.
 - Changes are applied to the stored appointment, not to what an old screen shows, so another tab's newer status or details are not overwritten. The rules are the Stage 2 ones; see [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) DEC-36 to DEC-38. There are no reminders or notifications for appointments.
+
+### Dashboard (stage 8)
+
+The start page `/` (Pulpit) has three panels, each with its own loading, error (with retry), empty and data states, so one failing read never blanks the page:
+
+- **Dzisiejsze dawki**: today's doses with the same rows and actions as the day view (mark taken / skipped, change, clear), the counts of taken, skipped and unrecorded doses (counts only: no percentages and no scores), and a link to all doses.
+- **Najbliższe wizyty**: the next three upcoming appointments, soonest first, and a note with a link when appointments are waiting for confirmation ("Do potwierdzenia"; nothing is changed automatically).
+- **Zapasy leków**: only the medications whose stock estimate can be computed, those that run out soonest first; it is an estimate, not a guarantee that a medicine is available, and the medications without an estimate are only counted.
+
+New users see an empty state with a link to add their first medication or appointment. All figures come from the existing logic (see [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) DEC-39 and DEC-40); the dashboard adds no rules of its own.
 
 ### Component preview (development only)
 

@@ -16,7 +16,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 5 | Medications: CRUD and schedule | ☑ |
 | 6 | Daily doses, history and stock | ☑ |
 | 7 | Doctor appointments | ☑ |
-| 8 | Dashboard | ☐ |
+| 8 | Dashboard | ☑ |
 | 9 | End-to-end tests, accessibility, demo deployment (MVP complete) | ☐ |
 | 10 | Supabase schema and Row Level Security | ☐ |
 | 11 | Authentication and Supabase persistence | ☐ |
@@ -171,12 +171,26 @@ Completion criteria:
 
 Scope: today's counts and dose list (reusing stage 6 components), next appointments, stock summary, navigation, independent loading/error handling per panel.
 
+As delivered (no repository interface change, no change to the Stage 2 rules or to the dose, medication and appointment screens' behaviour):
+- **`/` (Pulpit)** is the start page, with three labelled panels, each with its own loading, error (+ retry), empty and data states:
+  - **Dzisiejsze dawki**: today's doses (local day from the injected clock and time zone), the Stage 6 rows (`ScheduledDoseRow`) and the same write path (taken / skipped / change / clear, single-flight, honest feedback, focus return), the counts "Przyjęte / Pominięte / Bez zapisu / Razem dziś" (`summarizeDay`; counts only, no percentage or score), and a link to the full day view. A new user sees "Dodaj pierwszy lek"; a day without doses says so.
+  - **Najbliższe wizyty**: up to three upcoming appointments, soonest first (`selectDashboardAppointments` over `splitAppointments`), each with its state in words; a "Do potwierdzenia: n" note with a "Potwierdź" link to the Past tab when elapsed scheduled appointments exist (nothing is changed); "Brak nadchodzących wizyt" and "Wszystkie wizyty" / "Dodaj wizytę".
+  - **Zapasy leków**: only medications whose estimate can be computed (`summarizeStock` over `estimateStock`), fewest days first, with the existing "Niski zapas" label; a count (not a list) of in-use medications without an estimate; a message when none can be computed; the explanation of how the estimate is made and the statement that it is not a guarantee of availability; a link to "Zarządzaj lekami".
+- Doses and stock share one read of the medications and intake records (so marking a dose updates the counts and the stock together); appointments are read on their own. A read failure fails only the panels that depend on it.
+- `useDoseListActions` and `DoseFeedbackMessage` were extracted from the day view so both screens share them; the day view behaves as before (its tests pass unchanged).
+- Found in the final review and fixed with regression tests: (1) the shared write hook `useDoseActions` (stage 6) cleared its progress indicator on an ignored second click, so a very fast double click switched the spinner off while the first write was still running (it affected the day view too; the data was never at risk, since only one write happens); (2) a dashboard panel showed "no medication yet" next to a read error when the medications loaded empty but the intake records failed.
+- The `PlaceholderPage` component, whose only user was the old dashboard, was removed together with the test that described placeholder pages (there are none left; that test now checks that every section has a single level-one heading).
+
+Changes against the original plan (see PROJECT_SPEC DEC-39, DEC-40):
+- The roadmap says "stock summary" without a layout; on desktop the doses panel is full width (its rows hold two buttons) and appointments and stock sit side by side from the tablet width up, stacked on phones.
+- Elapsed appointments are shown as a count with a link, not as list items, to keep the panel short; the full "Do potwierdzenia" cards are on the appointments page.
+
 Completion criteria:
-- [ ] No percentages or adherence scores are shown; counts only.
-- [ ] A failing panel shows its own error while others render (tested).
-- [ ] Empty states for new users with calls to action (tested).
-- [ ] Stock panel lists only computable estimates; says so when none are available.
-- [ ] All standard checks pass.
+- [x] No percentages or adherence scores are shown; counts only (tested, also in the browser).
+- [x] A failing panel shows its own error while others render (tested: appointments, intake records and medications failing, with retry).
+- [x] Empty states for new users with calls to action (tested at component and browser level).
+- [x] Stock panel lists only computable estimates; says so when none are available (tested; a browser test found and fixed an ended medication without stock being counted as "unavailable").
+- [x] All standard checks pass (results in the stage 8 report). GitHub CI has not been observed.
 
 ## Stage 9 — End-to-end tests, accessibility, demo deployment (MVP complete)
 
