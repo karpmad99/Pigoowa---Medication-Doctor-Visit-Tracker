@@ -9,7 +9,7 @@ import { unitsMatch } from './units';
 /** Stock lasting fewer days than this is highlighted in the UI. A display threshold, not medical guidance. */
 export const LOW_STOCK_THRESHOLD_DAYS = 7;
 
-const MAX_UNIT_LENGTH = 30;
+export const MAX_UNIT_LENGTH = 30;
 
 export type StockUnavailableReason =
   /** The user has not entered any stock information. */

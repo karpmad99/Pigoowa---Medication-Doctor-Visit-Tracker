@@ -93,7 +93,7 @@ Only daily schedules are modelled in the MVP. Weekly/interval rules would add co
 | `dose_unit` | `text` not null | snapshot |
 | `recorded_at` | `timestamptz` not null default `now()` | when the user recorded it; updated on status change |
 
-`unique (medication_id, scheduled_date, scheduled_time)` — **one record per slot**; this is what makes repeated actions idempotent (via `insert … on conflict … do update`). Undo deletes the row by the same slot key, so it can never leave a duplicate behind.
+`unique (medication_id, scheduled_date, scheduled_time)` — **one record per slot**. The application stores a record with `insert … on conflict (id) do update` (the Stage 2 functions decide whether it is a new record or a change to an existing one); a *different* record already in the slot violates the unique constraint, and the repository reports that as `duplicate-slot` instead of overwriting it (PROJECT_SPEC DEC-24). Undo deletes the row by the same slot key, so it can never leave a duplicate behind.
 Indexes: `(user_id, scheduled_date)`, `(medication_id, scheduled_date)`.
 
 There is deliberately **no foreign key to `medication_schedule_times`**: schedule times may be edited or removed while history must remain. A log with no matching current slot is displayed as "outside current schedule".

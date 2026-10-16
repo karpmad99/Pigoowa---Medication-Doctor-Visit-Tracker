@@ -12,7 +12,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 1 | Project scaffold and quality tooling | ☑ |
 | 2 | Domain types and business logic | ☑ |
 | 3 | Design foundation and app shell | ☑ |
-| 4 | Mock data layer | ☐ |
+| 4 | Mock data layer | ☑ |
 | 5 | Medications: CRUD and schedule | ☐ |
 | 6 | Daily doses, history and stock | ☐ |
 | 7 | Doctor appointments | ☐ |
@@ -77,12 +77,18 @@ Completion criteria:
 
 Scope: repository interfaces; `localStorage` implementations with fictional seed data and a reset action; providers (clock, repositories); small custom data hooks returning `{ data, error, isLoading }` (TanStack Query is deliberately **not** used yet — DEC-12, added in stage 11); repository contract tests written so they can later run against Supabase.
 
+As delivered: repository interfaces for medications, intake records (dose logs) and appointments (`src/services/repositories.ts`); `localStorage` implementations that validate everything they read and write; typed `RepositoryError`s; fictional demo data with explicit `loadDemoData` / `resetDemoData` actions (reset keeps a backup); a `Clock`, time zone and id generator supplied through a `ServicesProvider`; the hooks `useMedications`, `useDoseLogs` and `useAppointments` on top of a small `useAsyncData`; a reusable repository contract suite. The reset action is a developer utility, not a user-facing control: it lives on the development-only page `/dev/data` (removed from production builds). A real settings screen is not part of this stage.
+
+Changes against the original plan (see PROJECT_SPEC DEC-20 to DEC-26):
+- Repositories contain no business rules and do not generate ids or timestamps: callers supply them, as the Stage 2 functions already expect. For that reason the `setStatus` method listed in the spec's first draft does not exist; a status change is Stage 2's `changeAppointmentStatus` followed by `update`. `get` was added for appointments.
+- The two small hooks beyond the three data hooks (`useServices`, `useClock`) exist only to read the provider.
+
 Completion criteria:
-- [ ] Contract tests pass for all repositories (create/read/update/delete, uniqueness of dose logs, error cases).
-- [ ] Hooks expose explicit loading / error / data states; tested.
-- [ ] Components import repositories only through hooks/context, never `localStorage` directly.
-- [ ] Seed data is clearly fictional.
-- [ ] All standard checks pass.
+- [x] Contract tests pass for all repositories (create/read/update/delete, uniqueness of dose logs, error cases). The suite (`src/services/contract/repositoryContract.ts`) knows nothing about `localStorage`; Stage 11 runs the same suite against Supabase.
+- [x] Hooks expose explicit loading / error / data states; tested (including late and superseded answers, unmount, reload and StrictMode).
+- [x] Components import repositories only through hooks/context, never `localStorage` directly. Enforced by `src/architecture.test.ts`, which fails if browser storage is touched outside `src/services/local/storage.ts`, if UI code imports `@/services/local`, or if any source file uses `console`.
+- [x] Seed data is clearly fictional (invented names, notes saying so, ids marked `demo-`).
+- [x] All standard checks pass (results in the stage 4 report).
 
 ## Stage 5 — Medications: CRUD and schedule
 

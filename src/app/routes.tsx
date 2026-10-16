@@ -6,7 +6,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { MedicationsPage } from '@/pages/MedicationsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
-// The component preview exists only while developing: `import.meta.env.DEV` is replaced by the
+// The component preview and the data page exist only while developing: `import.meta.env.DEV` is replaced by the
 // literal `false` in production builds, so this route and its page are dropped from the bundle.
 const developmentRoutes: RouteObject[] = import.meta.env.DEV
   ? [
@@ -15,6 +15,13 @@ const developmentRoutes: RouteObject[] = import.meta.env.DEV
         lazy: async () => {
           const { ComponentsPreviewPage } = await import('@/pages/ComponentsPreviewPage');
           return { Component: ComponentsPreviewPage };
+        },
+      },
+      {
+        path: 'dev/data',
+        lazy: async () => {
+          const { DevDataPage } = await import('@/pages/DevDataPage');
+          return { Component: DevDataPage };
         },
       },
     ]

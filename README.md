@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 3 of 12 complete (scaffold, domain logic, design foundation).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones) with a design system of reusable components. The three sections (Pulpit, Leki, Wizyty) are still placeholders that say their content is not built yet; none of the features below are usable. The tested business logic for schedules, dose generation, intake records, stock estimates and appointments exists (`src/features/*/logic`, `src/utils`), but nothing displays it yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 4 of 12 complete (scaffold, domain logic, design foundation, data layer).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones) with a design system of reusable components. The three sections (Pulpit, Leki, Wizyty) are still placeholders that say their content is not built yet; none of the features below are usable yet. Underneath, the tested business logic (`src/features/*/logic`) and a data layer that keeps fictional demo data in the browser (`src/services`) exist, but no real screen uses them yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -72,6 +72,46 @@ No environment variables are needed yet.
 
 Install the browser once with `npx playwright install chromium`. If you already have a Chromium binary, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its path instead.
 
+### Data layer and demo data
+
+The data layer sits behind interfaces (`src/services/repositories.ts`) so that the screens never know where data lives. Today it is stored in the browser's `localStorage`; a Supabase implementation is planned for stage 11 and is **not** implemented.
+
+> **Browser storage is not secure storage.** `localStorage` is plain text that any script on the page and anyone with access to the browser profile can read. It is used here only for fictional demo data and development. It is not a substitute for a secure production backend, and nothing in this repository claims the app is production-ready or compliant with privacy law. Do not enter real medical information.
+
+| What | Where |
+|---|---|
+| Interfaces: medications, intake records, appointments | `src/services/repositories.ts` |
+| Browser-storage implementation | `src/services/local/` |
+| Fictional demo data (pure function) | `src/services/demo/demoData.ts` |
+| Typed errors with Polish messages | `src/services/errors.ts` |
+| Clock, id generator | `src/utils/clock.ts`, `src/utils/id.ts` |
+| Services provider and hooks | `src/app/ServicesProvider.tsx`, `src/hooks/useServices.ts`, `src/hooks/useAsyncData.ts` |
+| Data hooks | `useMedications`, `useDoseLogs`, `useAppointments` in `src/features/*/hooks/` |
+
+**Storage keys and format.** One key per kind of record, each holding `{ "version": 1, "items": [ ... ] }`:
+
+- `pigoowa:v1:medications`, `pigoowa:v1:dose-logs`, `pigoowa:v1:appointments`
+- `pigoowa:v1:backup`: the previous contents saved by a demo-data reset (one slot, only the latest)
+
+Data with a different version is refused rather than guessed at. There are no migrations, because there is nothing to migrate yet.
+
+**Errors and corrupt data.** Everything read from storage is validated field by field. Invalid JSON, wrong shapes, missing fields, duplicate ids and the like produce a `RepositoryError` (for example `data-corrupted`) and the operation stops: damaged data is never treated as an empty database and never overwritten. Unreachable storage and full storage are reported as `storage-unavailable` and `storage-full`. Error messages are in Polish and never contain stored values, and the code never logs to the console. Details and the complete list of error codes are in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) §10.4.
+
+**Demo data and reset.** The demo data is invented (names, doctors and places are fictional; ids start with `demo-`). Nothing loads or resets it automatically. To use it while developing:
+
+```bash
+npm run dev
+# open http://localhost:5173/dev/data
+# "Wczytaj dane demonstracyjne" fills EMPTY storage with demo data
+# "Przywróć dane demonstracyjne…" replaces everything after a confirmation
+```
+
+A reset first copies whatever is stored, even damaged data, to the backup key, so nothing is destroyed before the new data is written. The page exists only in development builds; there is no demo-data control in the production app yet.
+
+**Running the repository contract tests.** `npm test` runs everything. To run only the data layer: `npx vitest run src/services`. The contract (`src/services/contract/repositoryContract.ts`) describes behaviour every implementation must have and knows nothing about `localStorage`; `src/services/local/localRepositories.test.ts` runs it against the browser-storage implementation, and the Supabase implementation of stage 11 is meant to run the same suite. Tests use a controllable fake storage (`src/test/fakeStorage.ts`) instead of the real one.
+
+**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); screens that use the data (stages 5 to 8); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
+
 ### Component preview (development only)
 
 While developing (`npm run dev`), `/dev/components` shows every UI component in use, including the dialogs and a sample form. The page is not included in production builds and will be deleted once real screens use the components.
@@ -86,13 +126,14 @@ While developing (`npm run dev`), `/dev/components` shows every UI component in 
 src/app/                 Route definitions
 src/components/ui/       Design-system components (Button, FormField, Dialog, ...)
 src/components/layout/   Application shell, page header, safety note
-src/hooks/               Shared React hooks (page title)
+src/hooks/               Shared React hooks (page title, services, async data)
+src/services/            Data layer: repository interfaces, browser-storage implementation, demo data
 src/pages/               One thin component per route
 src/index.css            Design tokens (colours, fonts, radii)
 src/features/            Domain types and pure business logic, one folder per feature
                          (medications, doses, appointments); no UI yet
 src/types/               Shared primitive types (LocalDate, LocalTime, Timestamp, Id)
-src/utils/               Date, time-zone and quantity helpers
+src/utils/               Date, time-zone, quantity, clock, id and formatting helpers
 src/test/                Test setup and fixtures
 e2e/                     Playwright tests
 docs/                    Specification, roadmap, database design

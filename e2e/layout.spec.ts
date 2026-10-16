@@ -1,6 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const pages = ['/', '/medications', '/appointments', '/dev/components', '/nie-ma-takiej-strony'];
+const pages = [
+  '/',
+  '/medications',
+  '/appointments',
+  '/dev/components',
+  '/dev/data',
+  '/nie-ma-takiej-strony',
+];
 
 async function hasHorizontalScroll(page: Page): Promise<boolean> {
   return page.evaluate(

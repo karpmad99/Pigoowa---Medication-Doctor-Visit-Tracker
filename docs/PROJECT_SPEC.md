@@ -1,6 +1,6 @@
 # Pigoowa — Project Specification
 
-> **Status:** the domain types and pure business logic described in §7 and §10.3 are implemented and tested (stage 2). There is no UI for them yet. See [ROADMAP.md](ROADMAP.md) for progress.
+> **Status:** the domain types and pure business logic described in §7 and §10.3 (stage 2), the design system (stage 3) and the browser-storage data layer of §10.4 (stage 4) are implemented and tested. The real screens that use them come in stages 5 to 8. See [ROADMAP.md](ROADMAP.md) for progress.
 
 Pigoowa is a web application for organising medications, dosage schedules, medication intake history and doctor appointments. The user interface is in Polish; code, database identifiers and technical documentation are in English.
 
@@ -116,7 +116,7 @@ Ambiguities are resolved with reasonable, **reversible** choices (IDs `DEC-xx`).
 | DEC-08 | **No i18n library.** Polish strings live in components; validation functions return issue codes, and the Polish messages for them are attached in the form layer (stage 5). | YAGNI for a single-language MVP. Reversible by extracting strings later. |
 | DEC-09 | **Ending a medication (end date) is the preferred option and preserves history.** Hard deletion exists as a secondary action that cascades to schedule and history, behind an explicit confirmation describing the consequences (M-4). | Intake history is valuable to the user (and to a doctor); deletion is irreversible. A hard-delete path is still needed to honour the right to erase personal data. Reversible: deletion can later be removed or replaced by archive/restore. |
 | DEC-10 | **Default time zone** comes from the browser; later stored in the user's profile (default `Europe/Warsaw`). | Poland-first, but not hard-coded. |
-| DEC-11 | **Mock data is persisted in `localStorage`** behind the same repository interface the Supabase implementation will use, with a "reset demo data" action. | Lets reviewers and E2E tests exercise real flows with reloads. localStorage is acceptable only because the data is fictional; it is not a persistence layer for real health data. |
+| DEC-11 | **Mock data is persisted in `localStorage`** behind the same repository interface the Supabase implementation will use, with a "reset demo data" action (implemented in stage 4, see §10.4). | Lets reviewers and E2E tests exercise real flows with reloads. localStorage is acceptable only because the data is fictional; it is not a persistence layer for real health data. |
 | DEC-12 | **TanStack Query is approved but added in stage 11** (Supabase integration), not earlier. Stages 4–10 use small custom data hooks over the repository interfaces, exposing the same `{ data, error, isLoading }` shape. | Server-state caching/invalidation/mutation handling is only really needed once data is genuinely remote. Until then it would be a dependency without a job. The hooks' shape is chosen so the later swap changes hook internals, not components. This is the only dependency outside the original list. |
 | DEC-13 | **Native `<dialog>` for modals/confirmations; no UI kit.** | Built-in focus trapping and Escape handling; fewer dependencies. Reversible with Radix/Headless UI. |
 | DEC-14 | **ID generation with `crypto.randomUUID()`** in the client for mock data; `gen_random_uuid()` in Postgres. | UUIDs avoid guessable IDs; same format both sides. |
@@ -125,6 +125,13 @@ Ambiguities are resolved with reasonable, **reversible** choices (IDs `DEC-xx`).
 | DEC-17 | **Three explicit dose actions instead of one "upsert".** `recordDose` creates a record (or confirms an identical one), `changeDoseStatus` changes an existing record, `undoDose` removes it. `recordDose` refuses to overwrite a record that has a different status. *(Refined in stage 2.)* | "Never silently overwrite" and stale-screen safety: if a record was undone in another tab, a late "change to skipped" click must fail with `record-not-found` instead of resurrecting it. The database-level upsert (DATABASE.md) is still how the repository stores the result. |
 | DEC-18 | **Supported calendar range is 1900–2999**; times are 24-hour `HH:mm` (`24:00` is invalid); timestamps must carry an explicit offset. | Rejects nonsense input and avoids the JavaScript `Date.UTC` two-digit-year quirk. |
 | DEC-19 | **DST policy for converting a local date and time to an instant** (only needed for appointments): a wall-clock time that does not exist is rejected (`nonexistent-time`); one that occurs twice resolves to the earlier occurrence and is flagged `ambiguousTime`. | "Reject impossible values rather than silently normalise". Medication schedule times are never converted to instants, so DST cannot move them. |
+| DEC-20 | **Repositories are plain storage: callers supply ids and timestamps; no `setStatus`.** *(Refined in stage 4.)* | Stage 2's functions already take ids and `now`. Keeping business rules out of repositories means the local and Supabase implementations stay interchangeable and the rules stay tested in one place. A status change is `changeAppointmentStatus` + `update`. |
+| DEC-21 | **Storage format: one versioned envelope per collection, no migrations.** | Lets a future release recognise old data. Refusing unknown versions is safer than guessing; migrations would be speculative. |
+| DEC-22 | **Corrupt or unknown stored data is an explicit error, never "empty", and is never overwritten.** Leftover records of a deleted medication are tolerated. | Treating damage as empty would let the next write destroy recoverable data. Tolerating orphans is needed because a medication deletion cannot be made atomic across two storage keys. |
+| DEC-23 | **Demo data is loaded or reset only by explicit calls; reset backs up first; sample data is recognised by the `demo-` id prefix.** | No silent data changes; recoverable even from damage; no new field on the domain types is needed to tell sample data from the user's own. |
+| DEC-24 | **`DoseLogRepository.upsert` stores by id and rejects a different record in the same slot (`duplicate-slot`).** *(Refines DEC-02 / DEC-17.)* | The Stage 2 functions decide create, update or no-op; storage must not silently replace some other record. The Supabase implementation maps its unique-violation to the same error. |
+| DEC-25 | **Data hooks return a loading / loaded / failed union plus `reload`; the loader must keep its identity; superseded and late answers are ignored; reloading goes back through loading.** | Makes "failure shown as empty list" unrepresentable and prevents stale answers overwriting newer ones. TanStack Query (stage 11) replaces the internals only. |
+| DEC-26 | **Development-only page `/dev/data` is the place where demo data is loaded and reset in stage 4.** | The roadmap asks for a reset action but no settings screen. A dev page exercises the layer in a browser without inventing production UI; it is excluded from production builds. |
 
 ## 7. Business rules
 
@@ -295,15 +302,50 @@ Notable points:
 - **Branded strings** were kept because they cost almost nothing (a cast in three parse functions) and stop an unvalidated string from reaching date logic. Repositories must run values from storage through the parse functions.
 - Stock estimates are a discriminated union (`StockEstimate`) so "unavailable" cannot be mistaken for a number.
 
-### 10.4 Repository interfaces (shape only)
+### 10.4 Data layer (implemented in stage 4)
+
+The code is the source of truth (`src/services/repositories.ts` has the interfaces with their documented behaviour); this section explains the design.
 
 ```ts
-interface MedicationRepository { list(); get(id); create(input); update(id, input); remove(id) }
-interface DoseLogRepository   { listByDateRange(from, to); upsert(input); remove(key) }
-interface AppointmentRepository { list(); create(input); update(id, input); setStatus(id, status); remove(id) }
+interface MedicationRepository {
+  list(); get(id); create(medication); update(medication); remove(id);   // remove also deletes the history
+}
+interface DoseLogRepository {
+  listByDateRange(from, to); upsert(log); remove(slot);
+}
+interface AppointmentRepository {
+  list(); get(id); create(appointment); update(appointment); remove(id);
+}
 ```
 
-All methods are `async` (so mock and Supabase share a contract) and fail with a typed `RepositoryError`.
+- **All methods are async** and fail by rejecting with a `RepositoryError` whose `code` says why (`not-found`, `duplicate-id`, `duplicate-slot`, `missing-reference`, `invalid-input`, `data-corrupted`, `unsupported-version`, `storage-unavailable`, `storage-full`, `storage-write-failed`, `demo-data-not-empty`, `unexpected`). The message is Polish and never contains stored values; the `detail` is an English hint (such as the path of an invalid field) that is safe to log.
+- **Repositories are plain storage.** They validate what they store but contain no business rules (DEC-20). Callers supply ids and timestamps. There is no `setStatus`: changing an appointment's status is `changeAppointmentStatus` (stage 2) followed by `update`.
+- **Dose log semantics** (DEC-24): `upsert` stores a record by id. A different record already in the same slot is **not** overwritten but rejected (`duplicate-slot`); a record whose medication does not exist is rejected (`missing-reference`). `remove(slot)` on a slot without a record succeeds, so undo can be repeated.
+- **Medication deletion** deletes its intake history too (DEC-09). Updating or ending a medication never touches the history, and records keep the amount and unit they were recorded with.
+- **Returned objects are copies**; changing one never changes what is stored.
+- **Services** are supplied once at the top as one `AppServices` object (`clock`, `timeZone`, `createId`, `repositories`, `demoData`) through a React context. Business functions still receive `now`/`today` as arguments; only the code that calls them reads the clock, through `useClock()`.
+- **Data hooks** (`useMedications`, `useDoseLogs(from, to)`, `useAppointments`) return `{ data, error, isLoading, reload }` as a union: exactly one of loading, loaded or failed, so a failure is never an empty list (DEC-25).
+
+#### Browser-storage implementation (`src/services/local`)
+
+| Item | Decision |
+|---|---|
+| Keys | One key per collection: `pigoowa:v1:medications`, `pigoowa:v1:dose-logs`, `pigoowa:v1:appointments`; the backup is `pigoowa:v1:backup`. A problem in one collection never affects another. |
+| Format and version | Each key holds `{ "version": 1, "items": [ ... ] }`. Data with another version is refused (`unsupported-version`), never guessed at. There are no migrations because there is nothing to migrate yet (DEC-21). |
+| Validation | Everything is validated field by field when **read** (TypeScript says nothing about stored JSON) and before it is **written**, with the limits of docs/DATABASE.md. Timestamps are normalised to UTC. |
+| Corrupt data | Not valid JSON, wrong shape, missing or invalid fields, duplicate ids, two records in one slot: `data-corrupted`. The operation stops before writing, so damaged data is **never treated as empty and never overwritten**. Leftover intake records whose medication no longer exists are tolerated (shown as history), not an error (DEC-22). |
+| Storage failures | Storage that cannot be read: `storage-unavailable`. A refused write: `storage-full` (quota) or `storage-write-failed`; the previous data stays in place. The storage is looked up on every call, so even a blocked `window.localStorage` is reported inside the operation. |
+| Atomicity | One key is written in one step. Deleting a medication writes two keys (medication, then history); if the second write fails, the first is restored. If even that fails the error says so. |
+| Several operations | Every operation reads the current stored state, changes it and writes it in one synchronous step with nothing cached, so operations in one tab cannot interleave or overwrite each other's data. Several tabs are not coordinated: the last write wins. |
+| Privacy | `localStorage` is readable plain text. It is acceptable only for fictional demo data and development, not for real health information (see §9). Nothing is logged to the console (enforced by a test). |
+
+#### Demo data
+
+`createDemoData({ now, timeZone })` (`src/services/demo`) is a pure function producing four medications, intake records and five appointments, all invented, with dates relative to today so "upcoming" stays upcoming. It covers the interesting cases for the Stage 2 rules: a schedule changed 10 days ago with older history, an ended medication, stock that is available and unavailable, and appointments that are upcoming, completed, cancelled and needing confirmation. Everything has an id starting with `demo-` (`isDemoId`), so the UI can mark sample data and tell it from the user's own (DEC-23).
+
+- Nothing loads or resets demo data implicitly: reading and ordinary writes never touch it.
+- `loadDemoData()` fills **empty** storage and refuses (`demo-data-not-empty`) if anything, even damaged data, is stored.
+- `resetDemoData()` replaces everything. The previous raw contents of the three keys, damaged or not, are first copied to the backup key (one slot: only the most recent previous state is kept); if the backup cannot be written nothing is changed, and if writing the demo data fails the previous data is restored.
 
 ## 11. Main risks and edge cases
 
