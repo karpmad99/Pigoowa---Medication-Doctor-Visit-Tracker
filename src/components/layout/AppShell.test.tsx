@@ -74,6 +74,8 @@ describe('AppShell navigation', () => {
 
   it.each([
     ['/', 'Pulpit'],
+    ['/doses', 'Dawki'],
+    ['/doses/history', 'Dawki'],
     ['/medications', 'Leki'],
     ['/appointments', 'Wizyty'],
   ])('marks only the current page (%s) as current', (path, currentLabel) => {
@@ -97,6 +99,7 @@ describe('AppShell navigation', () => {
 
     await user.tab(); // skip link
     await user.tab(); // Pulpit
+    await user.tab(); // Dawki
     await user.tab(); // Leki
     expect(screen.getByRole('link', { name: 'Leki' })).toHaveFocus();
     await user.keyboard('{Enter}');

@@ -14,7 +14,7 @@ function text(estimate: StockEstimate | 'loading' | 'failed') {
 
 describe('StockSummary', () => {
   it('shows the remaining amount and the days it lasts when the estimate is available', () => {
-    expect(text(available(28, 14))).toBe('Pozostało ok. 28 tabletka, wystarczy na ok. 14 dni.');
+    expect(text(available(28, 14))).toBe('Pozostało ok. 28 tabletek, wystarczy na ok. 14 dni.');
   });
 
   it.each([
@@ -37,7 +37,7 @@ describe('StockSummary', () => {
   it('says the stock is used up when it is exactly zero, which is not the same as unavailable', () => {
     const result = text(available(0, 0));
 
-    expect(result).toContain('Zapas wyczerpany (0 tabletka).');
+    expect(result).toContain('Zapas wyczerpany (0 tabletek).');
     expect(result).not.toContain('Szacunek niedostępny');
     // Nothing left is also "low": the badge accompanies the words.
     expect(result).toContain('Niski zapas');
@@ -56,7 +56,7 @@ describe('StockSummary', () => {
   });
 
   it.each<[StockUnavailableReason, string]>([
-    ['no-stock', 'nie podano zapasu.'],
+    ['no-stock', 'zapas nie został skonfigurowany.'],
     ['invalid-data', 'zapisane dane zapasu są nieprawidłowe.'],
     ['ended', 'lek został zakończony.'],
     ['no-schedule', 'lek nie ma harmonogramu.'],

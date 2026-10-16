@@ -4,6 +4,8 @@ import { Spinner } from '@/components/ui/Spinner';
 import { AddMedicationPage } from '@/pages/AddMedicationPage';
 import { AppointmentsPage } from '@/pages/AppointmentsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { DoseHistoryPage } from '@/pages/DoseHistoryPage';
+import { DosesPage } from '@/pages/DosesPage';
 import { EditMedicationPage } from '@/pages/EditMedicationPage';
 import { MedicationsPage } from '@/pages/MedicationsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -38,6 +40,8 @@ export const routes: RouteObject[] = [
     HydrateFallback: () => <Spinner />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: 'doses', element: <DosesPage /> },
+      { path: 'doses/history', element: <DoseHistoryPage /> },
       { path: 'medications', element: <MedicationsPage /> },
       { path: 'medications/new', element: <AddMedicationPage /> },
       { path: 'medications/:medicationId/edit', element: <EditMedicationPage /> },

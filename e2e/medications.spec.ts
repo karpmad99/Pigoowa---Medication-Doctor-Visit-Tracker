@@ -65,8 +65,8 @@ test.describe('adding a medication', () => {
     await expect(page.getByText('Dodano lek „Moj lek”.')).toBeVisible();
     const card = page.getByRole('article', { name: 'Moj lek' });
     await expect(card.getByText('08:00 — 1 tabletka')).toBeVisible();
-    await expect(card.getByText('20:00 — 0,5 tabletka')).toBeVisible();
-    await expect(card.getByText(/Pozostało ok\. 28 tabletka/)).toBeVisible();
+    await expect(card.getByText('20:00 — 0,5 tabletki')).toBeVisible();
+    await expect(card.getByText(/Pozostało ok\. 28 tabletek/)).toBeVisible();
 
     await page.reload();
 
@@ -153,11 +153,13 @@ test.describe('the list with demo data', () => {
     const demoxal = page.getByRole('article', { name: 'Demoxal' });
     await expect(demoxal.getByText('Przykład', { exact: true })).toBeVisible();
     await expect(demoxal.getByText('08:00 — 1 tabletka')).toBeVisible();
-    await expect(demoxal.getByText(/Pozostało ok\. 28 tabletka/)).toBeVisible();
+    await expect(demoxal.getByText(/Pozostało ok\. 28 tabletek/)).toBeVisible();
     await expect(
       page
         .getByRole('article', { name: 'Testovit' })
-        .getByText('Szacunek niedostępny: nie podano zapasu.'),
+        .getByText(
+          'Szacunek niedostępny: zapas nie został skonfigurowany. Wpisz go, edytując lek.',
+        ),
     ).toBeVisible();
     await expect(
       page.getByRole('article', { name: 'Dawnoxin' }).getByText('Zakończony'),

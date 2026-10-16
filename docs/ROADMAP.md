@@ -14,7 +14,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 3 | Design foundation and app shell | ☑ |
 | 4 | Mock data layer | ☑ |
 | 5 | Medications: CRUD and schedule | ☑ |
-| 6 | Daily doses, history and stock | ☐ |
+| 6 | Daily doses, history and stock | ☑ |
 | 7 | Doctor appointments | ☐ |
 | 8 | Dashboard | ☐ |
 | 9 | End-to-end tests, accessibility, demo deployment (MVP complete) | ☐ |
@@ -116,15 +116,30 @@ Completion criteria:
 
 Scope: day view with date selector; dose rows with taken / skipped / clear actions; "outside current schedule" records; history page with filters; stock estimate display with explanation and unavailable state.
 
+As delivered (no repository interface change was needed; Stage 2's logic and Stage 4's repositories were reused as they are):
+- **Day view** `/doses` (nav item *Dawki*): day selector (previous / next day, date field, "Dziś"; the day is kept in the address as `?date=`), "today" from the injected clock and time zone; planned doses from `generateScheduledDoses`; each row shows time, medication, amount and unit, status and the actions that fit it (mark taken / skipped; change to the other status / clear). A day count line ("Przyjęte: n. Pominięte: n. Bez zapisu: n."), a separate section *Wpisy poza aktualnym harmonogramem* (read-only, with the reason when it is certain), and the stock estimate per medication of the day with an explanation (`Jak liczymy szacunkowy zapas?`).
+- **History** `/doses/history`: recorded doses only, newest day first (earliest time first within a day), with the amount and unit as recorded, when each was recorded and the *Poza aktualnym harmonogramem* label with a reason; filters by date range, medication and status (kept in the address), count line, empty-history and no-match states, "Wyczyść filtry".
+- **Writes** go through `applyDoseAction`, which reads the slot from storage first and applies Stage 2's `recordDose` / `changeDoseStatus` / `undoDose`, then the slot-based `upsert` / `remove`; `useDoseActions` runs one write at a time and reports success only after it finished.
+- `useAsyncData` gained the opt-in `keepDataOnReload` (+ `isRefreshing`), so the day view does not flash a spinner after each write; `useDoseLogs` passes it through.
+- **Stock and `recordedAt`**: the stock estimate counts *taken* records by when they were recorded in the app. This was reviewed path by path and is covered by regression tests (`stockWithRecording.test.ts`); two consequences (recording late, correcting later) are documented limitations with a remedy (re-enter the stock), see PROJECT_SPEC §7.3. The stock explanation in the app states the rule.
+- Presentation fixes: Polish unit grammar for common units (`formatAmount`: 1 tabletka, 2 tabletki, 5 tabletek, 1,5 tabletki, 5 ml; unknown units are shown as typed) and an explicit "zapas nie został skonfigurowany" for missing stock, used on the medications list too.
+
+Changes against the original plan (see PROJECT_SPEC DEC-31 to DEC-35):
+- The roadmap names no routes; the day view is `/doses` and the history `/doses/history`, under one navigation item. The navigation now has four items (the grid and the keyboard-order tests were updated for it).
+- The history is not a time-limited view: with no filters it shows every record (records are loaded once and filtered in memory). There is no paging yet.
+- Records outside the current schedule are **read-only** in the day view (they cannot be changed or recorded again), but the **history offers "Usuń zapis…" for exactly those records**: a confirmation dialog (Cancel focused first) states that the record is deleted permanently and what stays, and the deletion re-checks against storage that the record is unchanged and still outside the schedule (`deleteOutsideScheduleRecord`, PROJECT_SPEC DEC-34). Records that match the schedule are corrected in the day view. No repository change was needed.
+- Stock is shown in the day view (for the medications that have doses that day) and, as in Stage 5, on the medications list. It is always "as of today", whichever day is selected. It is not repeated in the history.
+- Existing tests whose expectations changed because the product changed: unit grammar and the missing-stock wording in the Stage 5 stock tests, and the navigation tests (a new item in the keyboard order, and `/doses`, `/doses/history` as current pages). No assertion was removed.
+
 Completion criteria:
-- [ ] Marking taken/skipped/clear works and never alters schedules or other days (tested).
-- [ ] Undo updates or removes the existing record and never creates a duplicate; repeated undo is a no-op (tested at logic, repository and UI level).
-- [ ] Future days cannot be recorded (tested).
-- [ ] Repeated clicks produce a single record (tested); buttons disabled while pending.
-- [ ] History shows snapshot amount/unit, even after the medication is edited (tested).
-- [ ] Stock shows a value only when computable; otherwise shows the reason (tested).
-- [ ] Skipped and taken are distinguishable without relying on colour.
-- [ ] All standard checks pass.
+- [x] Marking taken/skipped/clear works and never alters schedules or other days (tested: `applyDoseAction`, day view, browser).
+- [x] Undo updates or removes the existing record and never creates a duplicate; repeated undo is a no-op (tested at logic (Stage 2), repository contract (Stage 4) and UI level).
+- [x] Future days cannot be recorded (tested: the UI offers no recording, `applyDoseAction` refuses it, the local date comes from the time zone, not UTC).
+- [x] Repeated clicks produce a single record (tested, including a slow write and a double click in the browser); buttons are disabled while a write or the refresh after it runs.
+- [x] History shows snapshot amount/unit, even after the medication is edited (tested in the day view, the history and the browser).
+- [x] Stock shows a value only when computable; otherwise shows the reason (tested: taken lowers it, skipped and unrecorded do not, missing stock, incompatible units, zero stock).
+- [x] Skipped and taken are distinguishable without relying on colour (each status has its own word and icon).
+- [x] All standard checks pass (results in the stage 6 report). GitHub CI has not been observed.
 
 ## Stage 7 — Doctor appointments
 
@@ -195,4 +210,21 @@ Completion criteria:
 
 ## After the MVP (not started until the above is stable)
 
-Email/push reminders (with non-guarantee wording) · low-stock notifications · recurring appointment reminders · weekly/interval schedules · improved mobile experience (PWA) · deeper accessibility review · monitoring · additional tests.
+Reminders (see "Dose reminders" below) · low-stock notifications · recurring appointment reminders · weekly/interval schedules · improved mobile experience (PWA) · deeper accessibility review · monitoring · additional tests.
+
+### Dose reminders (future requirement; nothing of this exists yet)
+
+Recorded now so it is not lost; **not part of the MVP and not started**. The wording to keep in the product: a reminder helps, it does not guarantee anything.
+
+Requirements as stated by the product owner:
+- On a phone, a reminder should play a clear, noticeable sound.
+- If the user neither acknowledges nor dismisses it, it repeats at a configurable interval (initially about every 10 minutes).
+- The user can mark the dose as taken, snooze the reminder or silence it.
+- Several medications at the same time must not produce several alarms.
+- Quiet hours and user-configurable behaviour should be considered.
+
+Open questions that must be answered **before anything is promised** (research, not assumptions):
+- What Android, iOS, browsers and installed PWAs actually allow in the background: a web page cannot be assumed to play audio while it is suspended or the phone is locked; timers in a closed tab do not run.
+- Which route can deliver it: system notifications (Notification API, service workers, Web Push — with iOS limits for installed PWAs), a PWA, or a native app. Server-side scheduling would also need Supabase (stages 10–11) and consent.
+- How to handle permissions being denied, battery optimisation, Do Not Disturb and time zone / daylight-saving changes.
+- A reminder must never be described as guaranteed unless the chosen implementation and the target platform really guarantee it; if the platform cannot, the app must say so.

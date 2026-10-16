@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 5 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Leki (Medications) works**: you can add, edit, end and permanently delete medications with a daily schedule and optional stock; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). Pulpit (Dashboard) and Wizyty (Appointments) are still placeholders, and recording doses (taken/skipped), the intake history screen and appointments are not built yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 6 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management, daily doses and history).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Leki (Medications) and Dawki (Doses) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, and see an explained stock estimate; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). Pulpit (Dashboard) and Wizyty (Appointments) are still placeholders. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -88,7 +88,7 @@ The data layer sits behind interfaces (`src/services/repositories.ts`) so that t
 | Clock, id generator | `src/utils/clock.ts`, `src/utils/id.ts` |
 | Services provider and hooks | `src/app/ServicesProvider.tsx`, `src/hooks/useServices.ts`, `src/hooks/useAsyncData.ts` |
 | Data hooks | `useMedications`, `useMedication(id)`, `useDoseLogs`, `useAppointments` in `src/features/*/hooks/` |
-| Write helper | `useAsyncAction` (`src/hooks/`): one write at a time, unmount-safe, reports success/failure |
+| Write helpers | `useAsyncAction` (`src/hooks/`): one write at a time, unmount-safe, reports success/failure; `useDoseActions` and `applyDoseAction` (`src/features/doses/`): record, change and clear doses |
 
 **Storage keys and format.** One key per kind of record, each holding `{ "version": 1, "items": [ ... ] }`:
 
@@ -123,6 +123,17 @@ Routes: `/medications` (list), `/medications/new` (add), `/medications/:medicati
 - **Editing the schedule**: `scheduleEffectiveFrom` moves to today only when the schedule really changes (a rename or notes change leaves it alone). Intake records are never rewritten; they keep the amount and unit they were recorded with.
 - **Ending** a medication is the primary way to stop it: it sets the last day and keeps all history. **Permanent deletion** is a secondary action; its confirmation dialog states what will be lost, shows the number of intake records, and offers "end instead".
 - A medication's id is generated once per opened add form, so repeated submits cannot create two records even if the button is pressed twice.
+
+### Doses, history and stock (stage 6)
+
+Routes: `/doses` (the day view, `?date=YYYY-MM-DD`) and `/doses/history` (filters in the address: `from`, `to`, `medication`, `status`). Both are under the navigation item *Dawki*.
+
+- **Day view**: pick a day (previous / next, a date field, "Dziś"; "today" comes from the clock and the time zone, not from UTC). The planned doses are generated from the schedules and never stored. Each dose is **taken**, **skipped** or **"Nie zapisano"**; a dose without a record is never treated as skipped or missed. Marking taken/skipped creates one record with the amount and unit as they are at that moment; the record can be changed to the other status (same record) or cleared (the record is deleted). Doses of future days cannot be recorded.
+- **Honest writes**: success is shown only after the write finished; a failed write shows an error and changes nothing; the data is read from storage right before writing, so a screen that is out of date (another tab) cannot overwrite anything; one write at a time, buttons disabled meanwhile; focus moves to the dose that changed.
+- **History**: only recorded doses, newest day first, with the dose *as recorded* (editing a medication never rewrites it). Records that no longer match the current schedule are kept and labelled *Poza aktualnym harmonogramem* with the reason; they cannot be changed, but a wrongly recorded one can be deleted from the history ("Usuń zapis…", after a confirmation that states it is permanent).
+- **Stock**: shown as an estimate, only when it can be computed (recorded *taken* doses since the stock was entered; skipped and unrecorded doses do not count); otherwise the reason is shown (not configured, different units, ...). A "Jak liczymy szacunkowy zapas?" note explains it.
+- **Stock and timing**: a taken dose counts by when it was *recorded* in the app, not by its time in the schedule. Entering a dose late, or changing a record's status after the stock was entered, can therefore make the estimate lower (or, in the second case, count a dose that was taken before the stock was entered). Re-entering the stock starts the count afresh. See PROJECT_SPEC §7.3.
+- **Known limits**: no paging in the history; records outside the current schedule cannot be changed (only deleted); unit grammar is correct only for common units (others are shown as typed); the stock estimate is always "as of today". Details: [docs/ROADMAP.md](docs/ROADMAP.md) stage 6 and [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) DEC-31 to DEC-35.
 
 ### Component preview (development only)
 

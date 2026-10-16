@@ -4,7 +4,8 @@ import { cx } from '@/utils/cx';
 // A handful of simple inline SVG icons, so no icon library is needed. They are decorative:
 // the visible text next to them carries the meaning, so they are hidden from screen readers.
 
-export type IconName = 'dashboard' | 'pill' | 'calendar' | 'check' | 'alert' | 'info' | 'close';
+export type IconName =
+  'dashboard' | 'pill' | 'calendar' | 'check' | 'alert' | 'info' | 'close' | 'minus' | 'clock';
 
 const shapes: Record<IconName, ReactNode> = {
   dashboard: (
@@ -41,6 +42,13 @@ const shapes: Record<IconName, ReactNode> = {
     </>
   ),
   close: <path d="M6 6l12 12M18 6L6 18" />,
+  minus: <path d="M5 12h14" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
 };
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {

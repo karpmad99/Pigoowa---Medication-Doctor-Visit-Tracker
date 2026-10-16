@@ -927,7 +927,7 @@ describe('the list reflects what the forms save', () => {
     await user.click(submit('Zapisz zmiany'));
 
     const updated = await screen.findByRole('article', { name: 'Demoxal' });
-    expect(within(updated).getByText('08:00 — 2 tabletka')).toBeVisible();
+    expect(within(updated).getByText('08:00 — 2 tabletki')).toBeVisible();
     expect(await allMedications(services)).toHaveLength(1);
   });
 });

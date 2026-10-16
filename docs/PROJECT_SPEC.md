@@ -1,6 +1,6 @@
 # Pigoowa — Project Specification
 
-> **Status:** the domain types and pure business logic described in §7 and §10.3 (stage 2), the design system (stage 3) the browser-storage data layer of §10.4 (stage 4) and the medication screens (stage 5) are implemented and tested. The doses, appointments and dashboard screens come in stages 6 to 8. See [ROADMAP.md](ROADMAP.md) for progress.
+> **Status:** the domain types and pure business logic described in §7 and §10.3 (stage 2), the design system (stage 3) the browser-storage data layer of §10.4 (stage 4), the medication screens (stage 5) and the day view, intake history and stock display (stage 6) are implemented and tested. The appointments and dashboard screens come in stages 7 and 8. See [ROADMAP.md](ROADMAP.md) for progress.
 
 Pigoowa is a web application for organising medications, dosage schedules, medication intake history and doctor appointments. The user interface is in Polish; code, database identifiers and technical documentation are in English.
 
@@ -31,7 +31,7 @@ Three sections: **Pulpit** (Dashboard), **Leki** (Medications), **Wizyty** (Appo
 
 ### 3.2 Explicitly out of scope for the MVP
 
-AI assistant · OCR / prescription scanning · billing · family/caregiver sharing · external calendar sync · push notifications · complex analytics · social features · interaction checking. A doctors table (DEC-05), weekly/custom recurrence rules and an i18n library (DEC-08) are also deferred.
+AI assistant · OCR / prescription scanning · billing · family/caregiver sharing · external calendar sync · push notifications and dose reminders (a future requirement, see ROADMAP "Dose reminders"; nothing is promised about background delivery) · complex analytics · social features · interaction checking. A doctors table (DEC-05), weekly/custom recurrence rules and an i18n library (DEC-08) are also deferred.
 
 ## 4. Functional requirements
 
@@ -136,6 +136,11 @@ Ambiguities are resolved with reasonable, **reversible** choices (IDs `DEC-xx`).
 | DEC-28 | **`DoseLogRepository.countForMedication(medicationId)`** returns the number of intake records of a medication (0 for an unknown id; storage problems are errors, never 0). | The delete dialog must say how many records will be lost (M-4). The method is the smallest addition; the contract suite covers it. |
 | DEC-29 | **Editing rules.** The effective date follows the start date only if it equalled the old start date, otherwise it is kept but never earlier than the new start; `applyScheduleChange` moves it to today only when the schedule really changes. Schedule row ids are kept. Stock keeps its `asOf` when the quantity is unchanged, is rebuilt (unit = dose unit, `asOf` = now) when changed and is removed when cleared. Intake records are never touched. | Preserves history and keeps the stock estimate honest (DEC-15). |
 | DEC-30 | **Ending vs deleting in the UI.** Ending sets only `endDate` (and `updatedAt`) and keeps all history; deletion is a secondary action after counting the records, with an "end instead" alternative. If the count fails, deletion is not offered. A failed rollback is reported as possibly inconsistent data, never as success. | History is the user's record (DEC-09); consequences must be known before a destructive action. |
+| DEC-31 | **Routes and navigation for stage 6.** The day view is `/doses` (`?date=YYYY-MM-DD`), the history `/doses/history` (`?from=&to=&medication=&status=`), both under the navigation item *Dawki*. State lives in the address, so a reload or the back button keeps it. An invalid value in the address is ignored and the user is told. | The roadmap names no routes. The address as state makes the views linkable and testable without extra state code. |
+| DEC-32 | **Dose writes read storage first and are single-flight.** `applyDoseAction` reads the slot's records from storage, applies Stage 2's `recordDose` (unrecorded on screen) or `changeDoseStatus` (recorded on screen) or `undoDose`, then `upsert` / `remove`. A stale screen therefore gets `already-recorded` / `record-not-found` and a refresh, never an overwrite or a resurrected record. One write runs at a time; the buttons stay disabled until the refresh after it finished. | D-4/D-7 hold even with two tabs or a double click; the screen is never trusted over storage. |
+| DEC-33 | **Records are loaded once and sliced in memory.** Both pages load all intake records (`EARLIEST..LATEST`) once; the day, the history filters and the stock estimates are derived from that. After a write the list is refreshed with `keepDataOnReload`; a failed refresh becomes an error. | No per-day request can arrive late and overwrite another day; no spinner flash after small writes. Fine for a local, single-user data set; stage 11 revisits it with TanStack Query and server-side range queries. |
+| DEC-34 | **Records outside the current schedule are read-only in the day view and can be deleted, one at a time, from the history.** They are shown with *Poza aktualnym harmonogramem* and a reason that is certain (medication deleted, before the start, after the end, before the schedule change, time not in the schedule). They cannot be changed or recorded again. The history offers *Usuń zapis…* for exactly these records only; a confirmation dialog states what goes (this record, permanently, no undo) and what stays (schedule, other records), with Cancel focused first. `deleteOutsideScheduleRecord` re-checks against storage that the slot still holds the same record (id and status) and that it is still outside the schedule, then uses the slot-based `remove`. | A historical fact must not be rewritten or duplicated by accident (D-9), yet a wrongly recorded dose must not be uncorrectable (the day view cannot reach it, and deleting the medication would destroy all its history). No new repository method or domain type was needed. Residual risk: the repository has no compare-and-delete, so a change by another tab in the milliseconds between the check and the removal cannot be excluded. |
+| DEC-35 | **Unit grammar is limited to known units.** `formatAmount` inflects a small table of common Polish units (and keeps `ml`, `mg`, ... unchanged); any other unit is shown exactly as typed. | The unit is free text; guessing grammar for arbitrary words would be wrong more often than right, and changing the user's text is worse. |
 
 ## 7. Business rules
 
@@ -173,18 +178,36 @@ Shared rules:
 - `recordDose` refuses a dose whose amount or unit is unusable (`invalid-dose`) rather than storing a misleading record.
 - Several records for one slot (impossible with the database's unique key) → `conflicting-records`; nothing is changed, because guessing which to keep or remove could destroy the wrong one.
 - The id for a new record is passed in (`newLogId`) so the function stays deterministic.
-- The UI disables a slot's buttons while its request is in flight.
+- The UI (stage 6, DEC-32) disables **all** dose buttons while a write runs and while the list refreshes after it, so a click cannot land on a row that is about to change.
 
 ### 7.3 Stock estimation
 
 `estimateStock({ medication, doseLogs, today })` in `features/medications/logic/stock.ts`. Explicit assumptions (shown to the user in a help text):
 
 1. Stock is the quantity the user entered, in **`stock.unit`**, valid *as of* `stock.asOf` (DEC-15).
-2. `remaining = quantity − Σ doseAmount` over **taken** records of this medication whose `recordedAt ≥ asOf`. The amount is the snapshot stored in the record, not the current schedule amount. Skipped and unrecorded doses consume nothing. (Consequence: forgetting to record a dose makes the estimate optimistic – hence "estimate". Known limitation: changing a taken record to skipped and back after `asOf` moves its `recordedAt`, so a dose taken *before* the stock was entered could then be counted.)
+2. `remaining = quantity − Σ doseAmount` over **taken** records of this medication whose `recordedAt ≥ asOf`. (`recordedAt` is *when the user recorded, or last changed, the record in the app* (§7.2): it is not the dose's scheduled time and not when the pill was physically taken, which the app does not know. Stage 6 checked every path that writes it, see below.) The amount is the snapshot stored in the record, not the current schedule amount. Skipped and unrecorded doses consume nothing. (Consequence: forgetting to record a dose makes the estimate optimistic – hence "estimate". Known limitation: changing a taken record to skipped and back after `asOf` moves its `recordedAt`, so a dose taken *before* the stock was entered could then be counted.)
 3. `plannedDaily = Σ doseAmount` over the normalised schedule (§7.1; daily schedule only in the MVP).
 4. `daysRemaining = floor(remaining / plannedDaily)`.
 5. `remaining` is clamped at 0. All arithmetic is done in whole thousandths, so decimal doses cannot drift (0.3 ÷ 0.1 is exactly 3 days, not 2).
 6. **Units are never converted.** Compared case-insensitively and ignoring surrounding/repeated spaces ("Tabletka " = "tabletka"); "mg" ≠ "ml".
+
+**What `recordedAt` does to the estimate (verified in stage 6 by `stockWithRecording.test.ts`, which runs the real recording path at chosen moments):**
+
+| Situation | Effect on the estimate |
+|---|---|
+| A dose recorded as *taken* after the stock was entered | Counted once. |
+| *Skipped*, or never recorded | Not counted. |
+| *Taken* changed to *skipped* | The amount comes back. Changed back to *taken*: counted again, once (it is the same single record). |
+| A *taken* record cleared | The amount comes back. A new record later is counted from its own `recordedAt`. |
+| Repeating the same status | No change, and `recordedAt` does not move. |
+| The schedule amount edited after recording | The recorded amount is still the one subtracted. |
+| The stock edited (quantity changed) | `asOf` becomes now: only doses recorded from then on count. With an unchanged quantity `asOf` is kept. |
+
+Two consequences follow from using the *recording* moment and are **accepted limitations, not bugs**, because the app has no "taken at" time to use instead (and the alternative, using the scheduled time, goes wrong in the opposite cases):
+1. **Recording late.** A dose taken in the morning, before the stock was counted at noon, but entered in the afternoon is counted again, so the estimate is too low (the safe direction).
+2. **Correcting later.** A *taken* record made before the count is not counted; if it is changed to *skipped* and back to *taken* after the count, `recordedAt` is "last changed", so it is then counted.
+
+The remedy for both is to enter the actual quantity again in the medication's edit form, which starts the count afresh. The stock explanation in the app says so. A real fix (a separate "taken at" time on the record) would be a domain-model change and is left to a later decision.
 
 The result is a discriminated union: `{ available: true, remaining, unit, daysRemaining }` or `{ available: false, reason }`. **Zero stock is an available estimate (`remaining: 0`)**, which is different from an unavailable one. Reasons, checked in this order:
 

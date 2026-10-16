@@ -1,9 +1,10 @@
 import { Badge } from '@/components/ui/Badge';
-import { formatQuantity, pluralize } from '@/utils/format';
+import { pluralize } from '@/utils/format';
 import { isLowStock, type StockEstimate, type StockUnavailableReason } from '../logic/stock';
+import { formatAmount } from '../logic/unitForms';
 
 const unavailableReasons: Record<StockUnavailableReason, string> = {
-  'no-stock': 'nie podano zapasu.',
+  'no-stock': 'zapas nie został skonfigurowany. Wpisz go, edytując lek.',
   'invalid-data': 'zapisane dane zapasu są nieprawidłowe.',
   ended: 'lek został zakończony.',
   'no-schedule': 'lek nie ma harmonogramu.',
@@ -39,8 +40,8 @@ export function StockSummary({ estimate }: StockSummaryProps) {
     <span className="flex flex-wrap items-center gap-2">
       <span>
         {estimate.remaining === 0
-          ? `Zapas wyczerpany (0 ${estimate.unit}).`
-          : `Pozostało ok. ${formatQuantity(estimate.remaining)} ${estimate.unit}, wystarczy na ${
+          ? `Zapas wyczerpany (${formatAmount(0, estimate.unit)}).`
+          : `Pozostało ok. ${formatAmount(estimate.remaining, estimate.unit)}, wystarczy na ${
               days === 0
                 ? 'mniej niż 1 dzień'
                 : `ok. ${String(days)} ${pluralize(days, { one: 'dzień', few: 'dni', many: 'dni' })}`

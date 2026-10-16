@@ -175,3 +175,99 @@ describe('useAsyncData', () => {
     expect(result.current.error).toBeUndefined();
   });
 });
+
+describe('useAsyncData with keepDataOnReload', () => {
+  it('is not refreshing while the first load runs, or once it is done', async () => {
+    const load = () => Promise.resolve('a');
+    const { result } = renderHook(() => useAsyncData(load, { keepDataOnReload: true }));
+
+    expect(result.current).toMatchObject({ isLoading: true, isRefreshing: false });
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.isRefreshing).toBe(false);
+  });
+
+  it('keeps showing the previous data while reload() fetches, then swaps in the new data', async () => {
+    const second = createDeferred<string>();
+    const answers = [Promise.resolve('first'), second.promise];
+    const load = vi.fn(() => answers.shift() ?? Promise.reject(new Error('unexpected')));
+    const { result } = renderHook(() => useAsyncData(load, { keepDataOnReload: true }));
+    await waitFor(() => {
+      expect(result.current.data).toBe('first');
+    });
+
+    act(() => {
+      result.current.reload();
+    });
+
+    // No loading state in between: the old data stays, marked as being refreshed.
+    expect(result.current).toMatchObject({
+      isLoading: false,
+      data: 'first',
+      error: undefined,
+      isRefreshing: true,
+    });
+    await act(async () => {
+      second.resolve('second');
+      await second.promise;
+    });
+    expect(result.current).toMatchObject({ data: 'second', isRefreshing: false });
+  });
+
+  it('turns a failed refresh into an error instead of presenting old data as current', async () => {
+    const failure = new RepositoryError('storage-unavailable');
+    const answers = [() => Promise.resolve('first'), () => Promise.reject(failure)];
+    const load = vi.fn(() => answers.shift()?.() ?? Promise.reject(new Error('unexpected')));
+    const { result } = renderHook(() => useAsyncData(load, { keepDataOnReload: true }));
+    await waitFor(() => {
+      expect(result.current.data).toBe('first');
+    });
+
+    act(() => {
+      result.current.reload();
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBe(failure);
+    });
+    expect(result.current).toMatchObject({ data: undefined, isRefreshing: false });
+  });
+
+  it('still starts at loading for a different request, never showing the other request’s data', async () => {
+    const loadA = () => Promise.resolve('A');
+    const gateB = createDeferred<string>();
+    const loadB = () => gateB.promise;
+    const { result, rerender } = renderHook(
+      ({ load }: { load: () => Promise<string> }) => useAsyncData(load, { keepDataOnReload: true }),
+      { initialProps: { load: loadA } },
+    );
+    await waitFor(() => {
+      expect(result.current.data).toBe('A');
+    });
+
+    rerender({ load: loadB });
+
+    expect(result.current).toMatchObject({ isLoading: true, data: undefined, isRefreshing: false });
+    await act(async () => {
+      gateB.resolve('B');
+      await gateB.promise;
+    });
+    expect(result.current.data).toBe('B');
+  });
+
+  it('without the option, reload() still goes back through loading', async () => {
+    const answers = [Promise.resolve('first'), new Promise<string>(() => undefined)];
+    const load = vi.fn(() => answers.shift() ?? Promise.reject(new Error('unexpected')));
+    const { result } = renderHook(() => useAsyncData(load));
+    await waitFor(() => {
+      expect(result.current.data).toBe('first');
+    });
+
+    act(() => {
+      result.current.reload();
+    });
+
+    expect(result.current).toMatchObject({ isLoading: true, data: undefined, isRefreshing: false });
+  });
+});

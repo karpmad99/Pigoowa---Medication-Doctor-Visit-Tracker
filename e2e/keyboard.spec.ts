@@ -22,6 +22,7 @@ test.describe('keyboard use', () => {
 
     await page.keyboard.press('Tab'); // skip link
     await page.keyboard.press('Tab'); // Pulpit
+    await page.keyboard.press('Tab'); // Dawki
     await page.keyboard.press('Tab'); // Leki
     await expect(page.getByRole('link', { name: 'Leki', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');

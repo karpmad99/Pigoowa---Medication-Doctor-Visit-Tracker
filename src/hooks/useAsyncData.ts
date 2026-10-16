@@ -12,9 +12,27 @@ export type AsyncData<T> =
   | { isLoading: false; data: undefined; error: RepositoryError };
 
 export type AsyncDataResult<T> = AsyncData<T> & {
-  /** Loads again. The state goes back to loading until the new result arrives. */
+  /**
+   * Loads again. By default the state goes back to loading until the new result arrives; with
+   * `keepDataOnReload` the previous data stays in place meanwhile (see `isRefreshing`).
+   */
   reload: () => void;
+  /**
+   * True only while a `reload` is in flight and the data shown is still the previous answer
+   * (requires `keepDataOnReload`). Always false otherwise.
+   */
+  isRefreshing: boolean;
 };
+
+export interface AsyncDataOptions {
+  /**
+   * Keep showing the last successful data while `reload` fetches fresh data, instead of going
+   * back to loading. For screens that refresh after a small write, where a spinner replacing the
+   * whole list would be a flicker. A failed refresh still becomes an error (never stale data
+   * presented as current), and a different `load` (a different request) always starts at loading.
+   */
+  keepDataOnReload?: boolean;
+}
 
 type Outcome<T> = { ok: true; data: T } | { ok: false; error: RepositoryError };
 
@@ -27,12 +45,18 @@ type Outcome<T> = { ok: true; data: T } | { ok: false; error: RepositoryError };
  * - Answers that arrive late are ignored: after the component unmounts, or after the request was
  *   replaced by a newer one, the old answer can no longer change the state.
  */
-export function useAsyncData<T>(load: () => Promise<T>): AsyncDataResult<T> {
+export function useAsyncData<T>(
+  load: () => Promise<T>,
+  { keepDataOnReload = false }: AsyncDataOptions = {},
+): AsyncDataResult<T> {
   const [version, setVersion] = useState(0);
   // A new object whenever the request changes. It labels the answer so we can tell whether an
   // answer belongs to the current request or an old one.
   const request = useMemo(() => ({ load, version }), [load, version]);
-  const [settled, setSettled] = useState<{ request: object; outcome: Outcome<T> } | null>(null);
+  const [settled, setSettled] = useState<{
+    request: { load: () => Promise<T> };
+    outcome: Outcome<T>;
+  } | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -58,9 +82,31 @@ export function useAsyncData<T>(load: () => Promise<T>): AsyncDataResult<T> {
   }, []);
 
   if (settled?.request !== request) {
-    return { isLoading: true, data: undefined, error: undefined, reload };
+    // Same loader, newer version = a reload (not a different request).
+    if (keepDataOnReload && settled?.request.load === load && settled.outcome.ok) {
+      return {
+        isLoading: false,
+        data: settled.outcome.data,
+        error: undefined,
+        reload,
+        isRefreshing: true,
+      };
+    }
+    return { isLoading: true, data: undefined, error: undefined, reload, isRefreshing: false };
   }
   return settled.outcome.ok
-    ? { isLoading: false, data: settled.outcome.data, error: undefined, reload }
-    : { isLoading: false, data: undefined, error: settled.outcome.error, reload };
+    ? {
+        isLoading: false,
+        data: settled.outcome.data,
+        error: undefined,
+        reload,
+        isRefreshing: false,
+      }
+    : {
+        isLoading: false,
+        data: undefined,
+        error: settled.outcome.error,
+        reload,
+        isRefreshing: false,
+      };
 }

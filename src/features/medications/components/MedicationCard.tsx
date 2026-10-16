@@ -4,11 +4,12 @@ import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Icon } from '@/components/ui/Icon';
 import { isDemoId } from '@/services/demo/demoData';
 import type { LocalDate } from '@/types/primitives';
-import { formatLocalDay, formatQuantity } from '@/utils/format';
+import { formatLocalDay } from '@/utils/format';
 import { normalizeScheduleTimes } from '../logic/schedule';
 import type { MedicationStatus } from '../logic/status';
 import type { StockEstimate } from '../logic/stock';
 import type { Medication } from '../types';
+import { formatAmount } from '../logic/unitForms';
 import { StockSummary } from './StockSummary';
 
 const statusLabels: Record<MedicationStatus, { text: string; tone: BadgeTone }> = {
@@ -85,7 +86,7 @@ export function MedicationCard({
               <ul className="space-y-0.5">
                 {schedule.map((entry) => (
                   <li key={entry.id}>
-                    {entry.timeOfDay} — {formatQuantity(entry.doseAmount)} {medication.doseUnit}
+                    {entry.timeOfDay} — {formatAmount(entry.doseAmount, medication.doseUnit)}
                   </li>
                 ))}
               </ul>

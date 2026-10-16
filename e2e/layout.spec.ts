@@ -2,6 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 const pages = [
   '/',
+  '/doses',
+  '/doses/history',
   '/medications',
   '/medications/new',
   '/appointments',

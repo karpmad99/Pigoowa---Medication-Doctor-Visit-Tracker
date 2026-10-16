@@ -9,6 +9,7 @@ const navigationItems: readonly {
   end: boolean;
 }[] = [
   { to: '/', label: 'Pulpit', icon: 'dashboard', end: true },
+  { to: '/doses', label: 'Dawki', icon: 'clock', end: false },
   { to: '/medications', label: 'Leki', icon: 'pill', end: false },
   { to: '/appointments', label: 'Wizyty', icon: 'calendar', end: false },
 ];
@@ -50,7 +51,7 @@ export function AppShell() {
           aria-label="Główna nawigacja"
           className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface md:static md:border-t-0 md:px-3"
         >
-          <ul className="grid grid-cols-3 md:grid-cols-1 md:gap-1">
+          <ul className="grid grid-cols-4 md:grid-cols-1 md:gap-1">
             {navigationItems.map((item) => (
               <li key={item.to}>
                 <NavLink to={item.to} end={item.end} className={navLinkClasses}>

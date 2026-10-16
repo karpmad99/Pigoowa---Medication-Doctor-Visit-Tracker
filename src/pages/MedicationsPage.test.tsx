@@ -145,11 +145,11 @@ describe('medication list: what a medication shows', () => {
 
     const demoxal = await findCard('Demoxal');
     await waitFor(() => {
-      expect(demoxal.getByText(/Pozostało ok\. 28 tabletka/)).toBeVisible();
+      expect(demoxal.getByText(/Pozostało ok\. 28 tabletek/)).toBeVisible();
     });
     expect(demoxal.getByText('Od 1 października 2026, bez daty zakończenia')).toBeVisible();
     const items = demoxal.getAllByRole('listitem').map((item) => item.textContent);
-    expect(items).toEqual(['08:00 — 1 tabletka', '20:00 — 0,5 tabletka']);
+    expect(items).toEqual(['08:00 — 1 tabletka', '20:00 — 0,5 tabletki']);
     expect(demoxal.getByText(/wystarczy na ok\. 18 dni/)).toBeVisible();
     expect(demoxal.getByText('Po jedzeniu')).toBeVisible();
   });
@@ -162,7 +162,9 @@ describe('medication list: what a medication shows', () => {
     const stock = (await (await findCard('Bez zapasu')).findByText(/Szacunek niedostępny/))
       .textContent;
 
-    expect(stock).toBe('Szacunek niedostępny: nie podano zapasu.');
+    expect(stock).toBe(
+      'Szacunek niedostępny: zapas nie został skonfigurowany. Wpisz go, edytując lek.',
+    );
     expect(stock).not.toMatch(/\d/);
   });
 
@@ -223,7 +225,7 @@ describe('medication list: what a medication shows', () => {
     renderApp(services);
 
     expect(
-      await (await findCard('Z historią')).findByText(/Pozostało ok\. 6 tabletka/),
+      await (await findCard('Z historią')).findByText(/Pozostało ok\. 6 tabletek/),
     ).toBeVisible();
   });
 
