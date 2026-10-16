@@ -7,6 +7,7 @@ const pages = [
   '/medications',
   '/medications/new',
   '/appointments',
+  '/appointments/new',
   '/dev/components',
   '/dev/data',
   '/nie-ma-takiej-strony',

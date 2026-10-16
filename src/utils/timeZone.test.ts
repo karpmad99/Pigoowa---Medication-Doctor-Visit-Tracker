@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { asLocalDate, asLocalTime, asTimestamp } from './date';
-import { getLocalDateInZone, isValidTimeZone, localDateTimeToTimestamp } from './timeZone';
+import {
+  getLocalDateInZone,
+  getLocalTimeInZone,
+  isValidTimeZone,
+  localDateTimeToTimestamp,
+} from './timeZone';
 
 const WARSAW = 'Europe/Warsaw';
 
@@ -39,6 +44,36 @@ describe('getLocalDateInZone ("today" depends on the zone)', () => {
 
   it('throws for an unknown time zone instead of guessing', () => {
     expect(() => getLocalDateInZone(asTimestamp('2026-01-15T03:00:00Z'), 'Nowhere/Land')).toThrow(
+      RangeError,
+    );
+  });
+});
+
+describe('getLocalTimeInZone', () => {
+  it('shows the wall-clock time in the zone, not in UTC', () => {
+    const instant = asTimestamp('2026-01-15T09:30:00Z');
+    expect(getLocalTimeInZone(instant, 'UTC')).toBe('09:30');
+    expect(getLocalTimeInZone(instant, WARSAW)).toBe('10:30'); // winter: UTC+1
+    expect(getLocalTimeInZone(asTimestamp('2026-07-15T09:30:00Z'), WARSAW)).toBe('11:30'); // summer: UTC+2
+  });
+
+  it('shows midnight as 00:00 (never 24:00), on the right side of the date change', () => {
+    expect(getLocalTimeInZone(asTimestamp('2026-01-15T23:00:00Z'), WARSAW)).toBe('00:00');
+    expect(getLocalTimeInZone(asTimestamp('2026-01-15T22:59:00Z'), WARSAW)).toBe('23:59');
+  });
+
+  it('drops seconds', () => {
+    expect(getLocalTimeInZone(asTimestamp('2026-01-15T09:30:59Z'), 'UTC')).toBe('09:30');
+  });
+
+  it('shows both occurrences of a repeated time on the night clocks go back', () => {
+    // 2026-10-25 in Warsaw: 02:30 happens at 00:30Z (summer time) and again at 01:30Z (winter time).
+    expect(getLocalTimeInZone(asTimestamp('2026-10-25T00:30:00Z'), WARSAW)).toBe('02:30');
+    expect(getLocalTimeInZone(asTimestamp('2026-10-25T01:30:00Z'), WARSAW)).toBe('02:30');
+  });
+
+  it('rejects an unknown time zone', () => {
+    expect(() => getLocalTimeInZone(asTimestamp('2026-01-15T03:00:00Z'), 'Nowhere/Land')).toThrow(
       RangeError,
     );
   });

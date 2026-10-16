@@ -132,12 +132,10 @@ describe('page titles', () => {
 });
 
 describe('section pages', () => {
-  // `/medications` is no longer a placeholder: stage 5 replaced it with the real list (see
-  // src/pages/MedicationsPage.test.tsx). The sections still to be built are listed here.
-  it.each([
-    ['/', 'Pulpit'],
-    ['/appointments', 'Wizyty'],
-  ])(
+  // `/medications` and `/appointments` are no longer placeholders: stages 5 and 7 replaced them
+  // with the real screens (see src/pages/MedicationsPage.test.tsx and AppointmentsPage.test.tsx).
+  // The sections still to be built are listed here.
+  it.each([['/', 'Pulpit']])(
     '%s says plainly that its content is not built yet and offers no fake controls',
     (path, title) => {
       renderAppAt(path);

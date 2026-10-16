@@ -173,3 +173,50 @@ describe('changeAppointmentStatus', () => {
     expect(changeAppointmentStatus(future, 'completed', later).ok).toBe(true);
   });
 });
+
+describe('classifyAppointment around local midnight (the classification itself uses instants, so the zone only decides what instant "midnight" is)', () => {
+  // A visit at 00:00 on 16 October in Warsaw (summer time, UTC+2) is 2026-10-15T22:00:00Z.
+  const midnightVisit = makeAppointment({ scheduledAt: asTimestamp('2026-10-15T22:00:00Z') });
+
+  it('is upcoming at 23:59:59 the evening before, and still upcoming at exactly midnight', () => {
+    expect(classifyAppointment(midnightVisit, asTimestamp('2026-10-15T21:59:59Z'))).toBe(
+      'upcoming',
+    );
+    expect(classifyAppointment(midnightVisit, asTimestamp('2026-10-15T22:00:00Z'))).toBe(
+      'upcoming',
+    );
+  });
+
+  it('needs confirmation from the first second after midnight, however UTC dates it', () => {
+    expect(classifyAppointment(midnightVisit, asTimestamp('2026-10-15T22:00:01Z'))).toBe(
+      'needs-confirmation',
+    );
+  });
+
+  it('a visit at 23:59 local is still upcoming at 23:58 local and needs confirmation at 00:00 local', () => {
+    const lateVisit = makeAppointment({ scheduledAt: asTimestamp('2026-10-15T21:59:00Z') });
+    expect(classifyAppointment(lateVisit, asTimestamp('2026-10-15T21:58:59Z'))).toBe('upcoming');
+    expect(classifyAppointment(lateVisit, asTimestamp('2026-10-15T22:00:00Z'))).toBe(
+      'needs-confirmation',
+    );
+  });
+
+  it('a cancelled visit stays in the past even when its time has not come, and a restored one is classified by its time again', () => {
+    const cancelledInAdvance = makeAppointment({
+      status: 'cancelled',
+      scheduledAt: asTimestamp('2026-12-01T10:00:00Z'),
+    });
+    expect(classifyAppointment(cancelledInAdvance, NOW)).toBe('past');
+
+    const restored = changeAppointmentStatus(cancelledInAdvance, 'scheduled', NOW);
+    expect(restored.ok && classifyAppointment(restored.appointment, NOW)).toBe('upcoming');
+    const oldCompleted = makeAppointment({
+      status: 'completed',
+      scheduledAt: asTimestamp('2026-01-01T10:00:00Z'),
+    });
+    const restoredOld = changeAppointmentStatus(oldCompleted, 'scheduled', NOW);
+    expect(restoredOld.ok && classifyAppointment(restoredOld.appointment, NOW)).toBe(
+      'needs-confirmation',
+    );
+  });
+});

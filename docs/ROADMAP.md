@@ -15,7 +15,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 4 | Mock data layer | ☑ |
 | 5 | Medications: CRUD and schedule | ☑ |
 | 6 | Daily doses, history and stock | ☑ |
-| 7 | Doctor appointments | ☐ |
+| 7 | Doctor appointments | ☑ |
 | 8 | Dashboard | ☐ |
 | 9 | End-to-end tests, accessibility, demo deployment (MVP complete) | ☐ |
 | 10 | Supabase schema and Row Level Security | ☐ |
@@ -145,12 +145,27 @@ Completion criteria:
 
 Scope: appointments page with Upcoming / Past tabs, list grouped by date, add/edit form, delete confirmation, mark completed / cancelled (and revert), "needs confirmation" state for elapsed scheduled visits.
 
+As delivered (no repository interface change and no change to the Stage 2 classification, validation or status rules):
+- **List** `/appointments`: accessible *Nadchodzące* / *Minione* tabs (ARIA tabs pattern, arrow keys / Home / End; the selected tab is also bold and underlined; the choice is kept in the address as `?tab=past`), each list grouped by day in the user's time zone (`groupAppointmentsByDate`), upcoming soonest first, past newest first. Each card shows time, doctor, specialty, place, notes and its state in words with an icon: *Zaplanowana*, *Do potwierdzenia*, *Odbyła się*, *Odwołana*. Loading, error + retry, "no appointments yet" and per-tab empty states, each with an action to add one.
+- **Classification** is `classifyAppointment` / `splitAppointments` (Stage 2) applied to the injected clock; an appointment at exactly the current instant is still upcoming; a cancelled or completed one is past whatever its time; an elapsed `scheduled` one is *Do potwierdzenia*, listed under *Minione* (and the *Nadchodzące* tab points to them), with quick *Oznacz jako odbytą* / *Oznacz jako odwołaną*. It is never changed automatically.
+- **Add / edit** `/appointments/new`, `/appointments/:id/edit` (React Hook Form + a Zod schema that only adapts `validateAppointmentDraft`, with Polish messages): date and time required, doctor or specialty required (both fields are marked), length limits, a time that does not exist on a clock-change day is refused, a time that exists twice is flagged and saved as the earlier one. Input is kept on a failed validation or save; errors are tied to their fields; the first invalid field is focused; one write at a time and a per-form id make a double submit create one appointment.
+- **Status**: mark completed / cancelled, and *Przywróć jako zaplanowaną* for a correction (Stage 2's `changeAppointmentStatus`; completed ↔ cancelled directly is not offered or accepted).
+- **Delete**: *Usuń trwale…* opens a confirmation dialog (Cancel focused first) that says it is permanent and points to cancelling instead; failures stay in the dialog.
+- **Writes** (`appointmentActions.ts`) read the appointment from storage first (like the dose writes), so a stale screen cannot overwrite a newer status or details; an edit is applied to the stored appointment and nothing is written if nothing changed; an appointment deleted elsewhere is reported, not recreated.
+- A small utility, `getLocalTimeInZone`, gives the wall-clock time of an instant in a zone (used to show and edit times).
+
+Changes against the original plan (see PROJECT_SPEC DEC-36 to DEC-38):
+- Edit keeps the exact stored instant when the typed date and time are the ones the appointment already has (otherwise editing the place of a visit at the *second* 02:30 of the night clocks go back would silently move it an hour).
+- After saving an appointment that is not upcoming, the user is taken to the *Minione* tab so the new entry is visible.
+- `/appointments` is no longer a placeholder: the "not built yet" test table lost that row (the same premise change as for `/medications` in stage 5). No assertion was removed.
+- Not done: reminders or notifications for appointments (a future requirement), recurring appointments, a separate doctors table (DEC-05).
+
 Completion criteria:
-- [ ] Add, edit, delete, status change work and persist across reload.
-- [ ] Upcoming vs past classification tested with the fake clock, including the boundary instant and midnight.
-- [ ] Validation: date/time required; doctor or specialty required.
-- [ ] Empty/loading/error states tested.
-- [ ] All standard checks pass.
+- [x] Add, edit, delete, status change work and persist across reload (component tests and browser tests with real reloads).
+- [x] Upcoming vs past classification tested with the fake clock, including the boundary instant and midnight (Stage 2 tests extended with local-midnight cases; page tests with different injected clocks; browser tests with a fixed clock and time zone).
+- [x] Validation: date/time required; doctor or specialty required (also whitespace-only, limits, nonexistent time).
+- [x] Empty/loading/error states tested.
+- [x] All standard checks pass (results in the stage 7 report). GitHub CI has not been observed.
 
 ## Stage 8 — Dashboard
 

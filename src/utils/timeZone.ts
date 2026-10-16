@@ -1,5 +1,5 @@
 import type { LocalDate, LocalTime, Timestamp } from '@/types/primitives';
-import { asLocalDate, timestampFromMs, timestampToMs } from './date';
+import { asLocalDate, asLocalTime, timestampFromMs, timestampToMs } from './date';
 
 // Everything that needs a time zone lives here, built on the standard `Intl` API (no date
 // library). Time zones are IANA names such as "Europe/Warsaw".
@@ -79,6 +79,14 @@ export function getLocalDateInZone(instant: Timestamp, timeZone: string): LocalD
   const month = String(wall.month).padStart(2, '0');
   const day = String(wall.day).padStart(2, '0');
   return asLocalDate(`${String(wall.year).padStart(4, '0')}-${month}-${day}`);
+}
+
+/** The time of day on the wall clock in `timeZone` at a given instant, minute precision (`HH:mm`). */
+export function getLocalTimeInZone(instant: Timestamp, timeZone: string): LocalTime {
+  const wall = getWallClock(timestampToMs(instant), timeZone);
+  return asLocalTime(
+    `${String(wall.hour).padStart(2, '0')}:${String(wall.minute).padStart(2, '0')}`,
+  );
 }
 
 export type LocalDateTimeConversion =

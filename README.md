@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 6 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management, daily doses and history).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Leki (Medications) and Dawki (Doses) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, and see an explained stock estimate; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). Pulpit (Dashboard) and Wizyty (Appointments) are still placeholders. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 7 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). Only Pulpit (Dashboard) is still a placeholder. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -112,7 +112,7 @@ A reset first copies whatever is stored, even damaged data, to the backup key, s
 
 **Running the repository contract tests.** `npm test` runs everything. To run only the data layer: `npx vitest run src/services`. The contract (`src/services/contract/repositoryContract.ts`) describes behaviour every implementation must have and knows nothing about `localStorage`; `src/services/local/localRepositories.test.ts` runs it against the browser-storage implementation, and the Supabase implementation of stage 11 is meant to run the same suite. Tests use a controllable fake storage (`src/test/fakeStorage.ts`) instead of the real one.
 
-**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); screens that use the data for doses, appointments and the dashboard (stages 6 to 8); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
+**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); the dashboard screen (stage 8); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
 
 ### Medications (stage 5)
 
@@ -134,6 +134,16 @@ Routes: `/doses` (the day view, `?date=YYYY-MM-DD`) and `/doses/history` (filter
 - **Stock**: shown as an estimate, only when it can be computed (recorded *taken* doses since the stock was entered; skipped and unrecorded doses do not count); otherwise the reason is shown (not configured, different units, ...). A "Jak liczymy szacunkowy zapas?" note explains it.
 - **Stock and timing**: a taken dose counts by when it was *recorded* in the app, not by its time in the schedule. Entering a dose late, or changing a record's status after the stock was entered, can therefore make the estimate lower (or, in the second case, count a dose that was taken before the stock was entered). Re-entering the stock starts the count afresh. See PROJECT_SPEC §7.3.
 - **Known limits**: no paging in the history; records outside the current schedule cannot be changed (only deleted); unit grammar is correct only for common units (others are shown as typed); the stock estimate is always "as of today". Details: [docs/ROADMAP.md](docs/ROADMAP.md) stage 6 and [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) DEC-31 to DEC-35.
+
+### Appointments (stage 7)
+
+Routes: `/appointments` (the list; `?tab=past` for the Past tab), `/appointments/new` and `/appointments/:appointmentId/edit`.
+
+- **Two tabs**, *Nadchodzące* and *Minione* (keyboard: arrow keys, Home, End), each grouped by day in the user's time zone: upcoming soonest first, past newest first. Every appointment shows its state in words with an icon: *Zaplanowana*, *Do potwierdzenia*, *Odbyła się*, *Odwołana*.
+- **"Do potwierdzenia"** is an appointment whose time has passed but that nobody marked. It is listed under *Minione* with quick actions *Oznacz jako odbytą* / *Oznacz jako odwołaną*. The app never marks, hides or deletes it by itself. An appointment starting at exactly the current instant is still upcoming; a cancelled or completed one is past whatever its time.
+- **Add / edit**: a date and a time are required, and so is a doctor or a specialty (one of them is enough); place and notes are optional. A time that does not exist on a clock-change day is refused; a time that happens twice is flagged and saved as the earlier one. Input is kept when validation or saving fails; a double submit creates one appointment.
+- **Status** can be changed and corrected (*Przywróć jako zaplanowaną*); completed ↔ cancelled goes through "scheduled". **Delete** is *Usuń trwale…*, behind a confirmation that says it is permanent.
+- Changes are applied to the stored appointment, not to what an old screen shows, so another tab's newer status or details are not overwritten. The rules are the Stage 2 ones; see [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) DEC-36 to DEC-38. There are no reminders or notifications for appointments.
 
 ### Component preview (development only)
 
