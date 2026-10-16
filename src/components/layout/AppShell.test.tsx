@@ -2,11 +2,18 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { ServicesProvider } from '@/app/ServicesProvider';
 import { routes } from '@/app/routes';
+import { createTestServices } from '@/test/services';
 
 function renderAppAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(<RouterProvider router={router} />);
+  // The medications page reads its data through the services, so the app needs a provider.
+  render(
+    <ServicesProvider services={createTestServices()}>
+      <RouterProvider router={router} />
+    </ServicesProvider>,
+  );
   return router;
 }
 
@@ -122,9 +129,10 @@ describe('page titles', () => {
 });
 
 describe('section pages', () => {
+  // `/medications` is no longer a placeholder: stage 5 replaced it with the real list (see
+  // src/pages/MedicationsPage.test.tsx). The sections still to be built are listed here.
   it.each([
     ['/', 'Pulpit'],
-    ['/medications', 'Leki'],
     ['/appointments', 'Wizyty'],
   ])(
     '%s says plainly that its content is not built yet and offers no fake controls',

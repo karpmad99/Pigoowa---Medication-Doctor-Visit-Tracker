@@ -1,6 +1,6 @@
 # Pigoowa — Project Specification
 
-> **Status:** the domain types and pure business logic described in §7 and §10.3 (stage 2), the design system (stage 3) and the browser-storage data layer of §10.4 (stage 4) are implemented and tested. The real screens that use them come in stages 5 to 8. See [ROADMAP.md](ROADMAP.md) for progress.
+> **Status:** the domain types and pure business logic described in §7 and §10.3 (stage 2), the design system (stage 3) the browser-storage data layer of §10.4 (stage 4) and the medication screens (stage 5) are implemented and tested. The doses, appointments and dashboard screens come in stages 6 to 8. See [ROADMAP.md](ROADMAP.md) for progress.
 
 Pigoowa is a web application for organising medications, dosage schedules, medication intake history and doctor appointments. The user interface is in Polish; code, database identifiers and technical documentation are in English.
 
@@ -132,6 +132,10 @@ Ambiguities are resolved with reasonable, **reversible** choices (IDs `DEC-xx`).
 | DEC-24 | **`DoseLogRepository.upsert` stores by id and rejects a different record in the same slot (`duplicate-slot`).** *(Refines DEC-02 / DEC-17.)* | The Stage 2 functions decide create, update or no-op; storage must not silently replace some other record. The Supabase implementation maps its unique-violation to the same error. |
 | DEC-25 | **Data hooks return a loading / loaded / failed union plus `reload`; the loader must keep its identity; superseded and late answers are ignored; reloading goes back through loading.** | Makes "failure shown as empty list" unrepresentable and prevents stale answers overwriting newer ones. TanStack Query (stage 11) replaces the internals only. |
 | DEC-26 | **Development-only page `/dev/data` is the place where demo data is loaded and reset in stage 4.** | The roadmap asks for a reset action but no settings screen. A dev page exercises the layer in a browser without inventing production UI; it is excluded from production builds. |
+| DEC-27 | **Zod is a thin adapter over the Stage 2 plain validation.** `medicationFormSchema` calls `validateMedicationForm` inside `superRefine` and maps issue codes to Polish messages. React Hook Form, Zod and `@hookform/resolvers` were installed in stage 5. *(Fulfils DEC-16.)* | One source of truth for the rules; the schema adds only messages and field paths. |
+| DEC-28 | **`DoseLogRepository.countForMedication(medicationId)`** returns the number of intake records of a medication (0 for an unknown id; storage problems are errors, never 0). | The delete dialog must say how many records will be lost (M-4). The method is the smallest addition; the contract suite covers it. |
+| DEC-29 | **Editing rules.** The effective date follows the start date only if it equalled the old start date, otherwise it is kept but never earlier than the new start; `applyScheduleChange` moves it to today only when the schedule really changes. Schedule row ids are kept. Stock keeps its `asOf` when the quantity is unchanged, is rebuilt (unit = dose unit, `asOf` = now) when changed and is removed when cleared. Intake records are never touched. | Preserves history and keeps the stock estimate honest (DEC-15). |
+| DEC-30 | **Ending vs deleting in the UI.** Ending sets only `endDate` (and `updatedAt`) and keeps all history; deletion is a secondary action after counting the records, with an "end instead" alternative. If the count fails, deletion is not offered. A failed rollback is reported as possibly inconsistent data, never as success. | History is the user's record (DEC-09); consequences must be known before a destructive action. |
 
 ## 7. Business rules
 
@@ -302,7 +306,7 @@ Notable points:
 - **Branded strings** were kept because they cost almost nothing (a cast in three parse functions) and stop an unvalidated string from reaching date logic. Repositories must run values from storage through the parse functions.
 - Stock estimates are a discriminated union (`StockEstimate`) so "unavailable" cannot be mistaken for a number.
 
-### 10.4 Data layer (implemented in stage 4)
+### 10.4 Data layer (implemented in stage 4; `countForMedication` added in stage 5)
 
 The code is the source of truth (`src/services/repositories.ts` has the interfaces with their documented behaviour); this section explains the design.
 
@@ -311,7 +315,7 @@ interface MedicationRepository {
   list(); get(id); create(medication); update(medication); remove(id);   // remove also deletes the history
 }
 interface DoseLogRepository {
-  listByDateRange(from, to); upsert(log); remove(slot);
+  listByDateRange(from, to); countForMedication(medicationId); upsert(log); remove(slot);
 }
 interface AppointmentRepository {
   list(); get(id); create(appointment); update(appointment); remove(id);
@@ -324,7 +328,7 @@ interface AppointmentRepository {
 - **Medication deletion** deletes its intake history too (DEC-09). Updating or ending a medication never touches the history, and records keep the amount and unit they were recorded with.
 - **Returned objects are copies**; changing one never changes what is stored.
 - **Services** are supplied once at the top as one `AppServices` object (`clock`, `timeZone`, `createId`, `repositories`, `demoData`) through a React context. Business functions still receive `now`/`today` as arguments; only the code that calls them reads the clock, through `useClock()`.
-- **Data hooks** (`useMedications`, `useDoseLogs(from, to)`, `useAppointments`) return `{ data, error, isLoading, reload }` as a union: exactly one of loading, loaded or failed, so a failure is never an empty list (DEC-25).
+- **Data hooks** (`useMedications`, `useMedication(id)`, `useDoseLogs(from, to)`, `useAppointments`) return `{ data, error, isLoading, reload }` as a union: exactly one of loading, loaded or failed, so a failure is never an empty list (DEC-25).
 
 #### Browser-storage implementation (`src/services/local`)
 

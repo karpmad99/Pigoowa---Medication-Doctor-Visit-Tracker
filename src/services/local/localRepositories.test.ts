@@ -257,6 +257,28 @@ describe('corrupted or foreign stored data', () => {
     expect(brokenError.message).not.toContain(secret);
   });
 
+  it('counts leftover intake records of a medication that no longer exists', async () => {
+    const storage = createFakeStorage({
+      [STORAGE_KEYS.doseLogs]: envelope([makeDoseLog({ id: 'l-1', medicationId: 'gone' })]),
+    });
+
+    expect(await createLocalRepositories(storage).doseLogs.countForMedication('gone')).toBe(1);
+  });
+
+  it('reports counting on damaged or unreachable data as an error, never as 0', async () => {
+    const damaged = createFakeStorage({ [STORAGE_KEYS.doseLogs]: '{broken' });
+    expect(
+      (await failureOf(createLocalRepositories(damaged).doseLogs.countForMedication('m-1'))).code,
+    ).toBe('data-corrupted');
+
+    const unreachable = createFakeStorage();
+    unreachable.failReads();
+    expect(
+      (await failureOf(createLocalRepositories(unreachable).doseLogs.countForMedication('m-1')))
+        .code,
+    ).toBe('storage-unavailable');
+  });
+
   it('accepts a stored intake record whose medication no longer exists (leftover history is shown, not an error)', async () => {
     const storage = createFakeStorage({
       [STORAGE_KEYS.doseLogs]: envelope([makeDoseLog({ id: 'l-1', medicationId: 'gone' })]),

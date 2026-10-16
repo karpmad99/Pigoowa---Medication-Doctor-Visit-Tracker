@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { useAppointments } from '@/features/appointments/hooks/useAppointments';
 import { useDoseLogs } from '@/features/doses/hooks/useDoseLogs';
+import { useMedication } from '@/features/medications/hooks/useMedication';
 import { useMedications } from '@/features/medications/hooks/useMedications';
 import { STORAGE_KEYS } from '@/services/local/collections';
 import { asLocalDate } from '@/utils/date';
@@ -152,5 +153,54 @@ describe('useAppointments', () => {
       expect(result.current.error?.code).toBe('data-corrupted');
     });
     expect(result.current.data).toBeUndefined();
+  });
+});
+
+describe('useMedication', () => {
+  it('loads one medication by id', async () => {
+    const services = createTestServices();
+    await services.repositories.medications.create(makeMedication({ id: 'm-1', name: 'Lek A' }));
+
+    const { result } = renderHook(() => useMedication('m-1'), {
+      wrapper: servicesWrapper(services),
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => {
+      expect(result.current.data?.name).toBe('Lek A');
+    });
+  });
+
+  it('reports a medication that does not exist as a not-found error, not as an empty result', async () => {
+    const services = createTestServices();
+
+    const { result } = renderHook(() => useMedication('ghost'), {
+      wrapper: servicesWrapper(services),
+    });
+
+    await waitFor(() => {
+      expect(result.current.error?.code).toBe('not-found');
+    });
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it('loads the other medication when the id changes', async () => {
+    const services = createTestServices();
+    await services.repositories.medications.create(makeMedication({ id: 'm-1', name: 'Pierwszy' }));
+    await services.repositories.medications.create(makeMedication({ id: 'm-2', name: 'Drugi' }));
+    const { result, rerender } = renderHook(({ id }) => useMedication(id), {
+      wrapper: servicesWrapper(services),
+      initialProps: { id: 'm-1' },
+    });
+    await waitFor(() => {
+      expect(result.current.data?.name).toBe('Pierwszy');
+    });
+
+    rerender({ id: 'm-2' });
+
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => {
+      expect(result.current.data?.name).toBe('Drugi');
+    });
   });
 });

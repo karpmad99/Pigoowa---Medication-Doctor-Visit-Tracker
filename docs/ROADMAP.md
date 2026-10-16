@@ -13,7 +13,7 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 2 | Domain types and business logic | ☑ |
 | 3 | Design foundation and app shell | ☑ |
 | 4 | Mock data layer | ☑ |
-| 5 | Medications: CRUD and schedule | ☐ |
+| 5 | Medications: CRUD and schedule | ☑ |
 | 6 | Daily doses, history and stock | ☐ |
 | 7 | Doctor appointments | ☐ |
 | 8 | Dashboard | ☐ |
@@ -94,14 +94,23 @@ Completion criteria:
 
 Scope: Zod schemas wrapping the stage 2 validation rules (with Polish messages for the issue codes); medications list page with empty state; add/edit form (React Hook Form + Zod) including schedule-time editor and optional stock; **"end medication" as the primary way to stop a medication (history preserved)**; permanent deletion as a secondary action whose confirmation dialog explicitly states the consequences (M-4).
 
+As delivered: the medications list (`/medications`) with loading, error + retry, empty and populated states, status shown as text, a *Przykład* badge for demo records and an honest stock summary; the add and edit forms (`/medications/new`, `/medications/:id/edit`) with a schedule-row editor; the "end medication" dialog; a permanent-deletion dialog that states the consequences and the number of history records and offers "end instead"; Zod schemas (`src/features/medications/schemas.ts`) that only adapt the plain Stage 2 validation; pure edit/end logic (`saveMedication.ts`, `endMedication.ts`, `status.ts`); `useMedication(id)` and a small `useAsyncAction` for writes.
+
+Changes against the original plan (see PROJECT_SPEC DEC-27 to DEC-30):
+- React Hook Form, Zod and `@hookform/resolvers` were not installed before this stage (DEC-16 deferred them to here); they are the only dependency change.
+- `DoseLogRepository.countForMedication(medicationId)` was added so the delete dialog can show how many records will be lost. Contract tests cover it; the local implementation counts leftover records of a nonexistent medication too.
+- Editing follows `applyScheduleChange` (Stage 2): the effective date moves to today only on a real schedule change, never on a rename. Changing only the dose unit leaves the stock's own unit alone, so the estimate becomes "units incompatible" rather than being reinterpreted.
+- `useAsyncAction({ blockAfterSuccess })` exists because a second submit could pass asynchronous validation after the first save had finished. The add page also fixes the new medication's id once per mount, so a duplicate record is impossible in any case.
+- Two existing tests changed their set-up, not their expectations: the router/shell tests now render inside a `ServicesProvider` (the page reads data), and `/medications` was removed from the table of "not built yet" placeholder pages.
+
 Completion criteria:
-- [ ] Add, edit, delete work against the mock repository; state survives reload.
-- [ ] Form validation tested (required fields, positive dose, duplicate times, end ≥ start, stock ≥ 0); errors announced accessibly.
-- [ ] Double submit creates one medication (tested).
-- [ ] Ending a medication keeps its history (tested); the delete dialog names the consequences, shows the number of history records to be lost, and offers "end instead" (tested).
-- [ ] Changing schedule times sets `scheduleEffectiveFrom` (tested).
-- [ ] Loading, empty and error states tested.
-- [ ] All standard checks pass.
+- [x] Add, edit, delete work against the mock repository; state survives reload (component tests and browser tests with real reloads).
+- [x] Form validation tested (required fields, positive dose, duplicate times, end ≥ start, stock ≥ 0); errors are tied to their fields (`aria-describedby`, `aria-invalid`), the first invalid field gets focus, and the input is kept.
+- [x] Double submit creates one medication (component test and browser test).
+- [x] Ending a medication keeps its history (tested); the delete dialog names the consequences, shows the number of history records to be lost, and offers "end instead" (tested, including failures and a rollback failure).
+- [x] Changing schedule times sets `scheduleEffectiveFrom` (tested); a rename does not.
+- [x] Loading, empty and error states tested.
+- [x] All standard checks pass (results in the stage 5 report). GitHub CI has not been observed.
 
 ## Stage 6 — Daily doses, history and stock
 

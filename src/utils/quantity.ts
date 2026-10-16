@@ -16,6 +16,22 @@ export function fromThousandths(thousandths: number): number {
   return thousandths / THOUSANDTHS;
 }
 
+// What a person may type: digits, optionally a decimal comma or point and up to 3 decimals.
+const QUANTITY_TEXT = /^\d{1,7}(?:[.,]\d{1,3})?$/;
+
+/**
+ * Reads a quantity typed into a form. Polish users write "0,5", others "0.5"; both are accepted.
+ * Anything else (empty text, letters, a sign, "1e3", a thousands separator, a fourth decimal)
+ * is rejected with `null`, instead of being guessed at. Zero is returned as 0; whether zero is
+ * allowed is for the caller to decide.
+ */
+export function parseQuantityInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (!QUANTITY_TEXT.test(trimmed)) return null;
+  const value = Number(trimmed.replace(',', '.'));
+  return isValidQuantity(value, { allowZero: true }) ? value : null;
+}
+
 /** True for a finite number with at most 3 decimals, not above `MAX_QUANTITY`, and positive (or zero, if allowed). */
 export function isValidQuantity(value: number, options: { allowZero: boolean }): boolean {
   if (!Number.isFinite(value) || value > MAX_QUANTITY) return false;

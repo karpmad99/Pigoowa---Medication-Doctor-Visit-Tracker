@@ -1,6 +1,6 @@
 import { cx } from '@/utils/cx';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerOutline' | 'ghost';
 export type ButtonSize = 'md' | 'sm';
 
 const base =
@@ -11,6 +11,8 @@ const variants: Record<ButtonVariant, string> = {
   primary: 'bg-brand-600 text-white hover:bg-brand-700',
   secondary: 'border border-line-strong bg-surface text-ink hover:bg-canvas',
   danger: 'bg-danger-600 text-white hover:bg-danger-700',
+  // A destructive action that is offered but not encouraged: outlined, red text, never the main button.
+  dangerOutline: 'border border-danger-600 bg-surface text-danger-700 hover:bg-danger-50',
   ghost: 'text-brand-700 hover:bg-brand-50',
 };
 

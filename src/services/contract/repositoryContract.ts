@@ -372,6 +372,76 @@ export function describeRepositoryContract(name: string, setup: () => ContractCo
       });
     });
 
+    describe('counting the intake history of a medication', () => {
+      beforeEach(async () => {
+        await repositories.medications.create(makeMedication({ id: 'med-1' }));
+        await repositories.medications.create(makeMedication({ id: 'med-2', name: 'Drugi' }));
+      });
+
+      it('is 0 for a medication without records and for an unknown id', async () => {
+        expect(await repositories.doseLogs.countForMedication('med-1')).toBe(0);
+        expect(await repositories.doseLogs.countForMedication('no-such-medication')).toBe(0);
+      });
+
+      it('counts all dates of one medication and none of another', async () => {
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', medicationId: 'med-1' }));
+        await repositories.doseLogs.upsert(
+          makeDoseLog({
+            id: 'l-2',
+            medicationId: 'med-1',
+            scheduledDate: asLocalDate('2026-03-01'),
+          }),
+        );
+        await repositories.doseLogs.upsert(
+          makeDoseLog({ id: 'l-3', medicationId: 'med-1', scheduledTime: asLocalTime('20:00') }),
+        );
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-4', medicationId: 'med-2' }));
+
+        expect(await repositories.doseLogs.countForMedication('med-1')).toBe(3);
+        expect(await repositories.doseLogs.countForMedication('med-2')).toBe(1);
+      });
+
+      it('follows undo, replacement and deletion of the medication', async () => {
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', medicationId: 'med-1' }));
+        await repositories.doseLogs.upsert(
+          makeDoseLog({ id: 'l-2', medicationId: 'med-1', scheduledTime: asLocalTime('20:00') }),
+        );
+
+        // Changing a record's status replaces it: still one record, so still counted once.
+        await repositories.doseLogs.upsert(
+          makeDoseLog({ id: 'l-1', medicationId: 'med-1', status: 'skipped' }),
+        );
+        expect(await repositories.doseLogs.countForMedication('med-1')).toBe(2);
+
+        await repositories.doseLogs.remove({ medicationId: 'med-1', date: TODAY, time: MORNING });
+        expect(await repositories.doseLogs.countForMedication('med-1')).toBe(1);
+
+        await repositories.medications.remove('med-1');
+        expect(await repositories.doseLogs.countForMedication('med-1')).toBe(0);
+      });
+
+      it('is the number of records that deleting the medication destroys', async () => {
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', medicationId: 'med-1' }));
+        await repositories.doseLogs.upsert(
+          makeDoseLog({ id: 'l-2', medicationId: 'med-1', scheduledTime: asLocalTime('20:00') }),
+        );
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-3', medicationId: 'med-2' }));
+        const before = await repositories.doseLogs.listByDateRange(
+          asLocalDate('2000-01-01'),
+          asLocalDate('2999-12-31'),
+        );
+        const announced = await repositories.doseLogs.countForMedication('med-1');
+
+        await repositories.medications.remove('med-1');
+
+        const after = await repositories.doseLogs.listByDateRange(
+          asLocalDate('2000-01-01'),
+          asLocalDate('2999-12-31'),
+        );
+        expect(before.length - after.length).toBe(announced);
+      });
+    });
+
     describe('intake history and medications together', () => {
       it('keeps the recorded amount and unit when the medication is changed afterwards', async () => {
         const original = makeMedication({ id: 'med-1', doseUnit: 'tabletka' });

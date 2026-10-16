@@ -43,6 +43,12 @@ export interface DoseLogRepository {
   upsert(log: DoseLog): Promise<DoseLog>;
   /** Removes the record in this slot. Removing a slot that has no record succeeds and does nothing (undo is repeatable). */
   remove(slot: DoseSlot): Promise<void>;
+  /**
+   * How many intake records belong to the medication, over all dates. This is what deleting the
+   * medication would permanently destroy, so the UI can say so before asking for confirmation.
+   * An id that has no records (including an unknown id) counts 0; it is not an error.
+   */
+  countForMedication(medicationId: Id): Promise<number>;
 }
 
 export interface AppointmentRepository {

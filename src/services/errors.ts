@@ -59,6 +59,15 @@ export class RepositoryError extends Error {
   }
 }
 
+/**
+ * True when an operation failed AND the attempt to undo its partial effects failed too, so the
+ * stored data may be inconsistent (for example a medication deleted but its history still
+ * there). Callers should say so plainly rather than treat it as an ordinary failed write.
+ */
+export function isRollbackFailure(error: RepositoryError): boolean {
+  return error.detail?.startsWith('rollback failed') ?? false;
+}
+
 /** Turns anything that was thrown into a RepositoryError, so callers can rely on one error type. */
 export function toRepositoryError(error: unknown): RepositoryError {
   return error instanceof RepositoryError

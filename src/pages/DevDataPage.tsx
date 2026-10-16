@@ -14,15 +14,12 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 import type { AsyncDataResult } from '@/hooks/useAsyncData';
 import { toRepositoryError } from '@/services/errors';
 import { isDemoId } from '@/services/demo/demoData';
-import { asLocalDate, MAX_YEAR, MIN_YEAR } from '@/utils/date';
+import { EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE } from '@/utils/date';
 import { formatTimestamp } from '@/utils/format';
 
 // TEMPORARY, development-only page (see routes.tsx). It exercises the data layer in a real
 // browser: loading and resetting the fictional demo data and showing loading, error and empty
 // states. The real screens arrive in stages 5 to 8. Not part of production builds.
-
-const ALL_TIME_FROM = asLocalDate(`${String(MIN_YEAR)}-01-01`);
-const ALL_TIME_TO = asLocalDate(`${String(MAX_YEAR)}-12-31`);
 
 function DataSection<T>({
   title,
@@ -57,7 +54,7 @@ export function DevDataPage() {
   usePageTitle('Dane demonstracyjne');
   const { demoData, timeZone } = useServices();
   const medications = useMedications();
-  const doseLogs = useDoseLogs(ALL_TIME_FROM, ALL_TIME_TO);
+  const doseLogs = useDoseLogs(EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE);
   const appointments = useAppointments();
 
   const [isWorking, setIsWorking] = useState(false);

@@ -81,6 +81,10 @@ export function asTimestamp(input: string): Timestamp {
   return value;
 }
 
+/** The first and last supported day, for "all dates" queries. */
+export const EARLIEST_LOCAL_DATE = asLocalDate(`${String(MIN_YEAR)}-01-01`);
+export const LATEST_LOCAL_DATE = asLocalDate(`${String(MAX_YEAR)}-12-31`);
+
 /** Adds (or, if negative, subtracts) whole calendar days. Leap years and month ends are handled. */
 export function addDays(date: LocalDate, days: number): LocalDate {
   if (!Number.isInteger(days)) throw new RangeError(`Days must be an integer, got ${String(days)}`);

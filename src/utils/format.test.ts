@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { asLocalDate, asTimestamp } from './date';
-import { formatLocalDate, formatQuantity, formatTimestamp } from './format';
+import {
+  formatLocalDate,
+  formatLocalDay,
+  formatQuantity,
+  formatTimestamp,
+  pluralize,
+} from './format';
 
 describe('formatLocalDate', () => {
   it('writes the weekday and the month name in Polish', () => {
@@ -34,5 +40,32 @@ describe('formatQuantity', () => {
     expect(formatQuantity(1.5)).toBe('1,5');
     expect(formatQuantity(2)).toBe('2');
     expect(formatQuantity(0.125)).toBe('0,125');
+  });
+});
+
+describe('formatLocalDay', () => {
+  it('writes the day and month in Polish without a weekday', () => {
+    expect(formatLocalDay(asLocalDate('2026-10-15'))).toBe('15 października 2026');
+    expect(formatLocalDay(asLocalDate('2024-02-29'))).toBe('29 lutego 2024');
+  });
+});
+
+describe('pluralize', () => {
+  const forms = { one: 'zapis', few: 'zapisy', many: 'zapisów' };
+
+  it.each([
+    [0, 'zapisów'],
+    [1, 'zapis'],
+    [2, 'zapisy'],
+    [4, 'zapisy'],
+    [5, 'zapisów'],
+    [12, 'zapisów'],
+    [14, 'zapisów'],
+    [22, 'zapisy'],
+    [25, 'zapisów'],
+    [112, 'zapisów'],
+    [1.5, 'zapisów'],
+  ])('uses the right Polish form for %s', (count, expected) => {
+    expect(pluralize(count, forms)).toBe(expected);
   });
 });

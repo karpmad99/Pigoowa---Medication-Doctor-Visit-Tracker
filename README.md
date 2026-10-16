@@ -2,7 +2,7 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 4 of 12 complete (scaffold, domain logic, design foundation, data layer).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones) with a design system of reusable components. The three sections (Pulpit, Leki, Wizyty) are still placeholders that say their content is not built yet; none of the features below are usable yet. Underneath, the tested business logic (`src/features/*/logic`) and a data layer that keeps fictional demo data in the browser (`src/services`) exist, but no real screen uses them yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 5 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Leki (Medications) works**: you can add, edit, end and permanently delete medications with a daily schedule and optional stock; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). Pulpit (Dashboard) and Wizyty (Appointments) are still placeholders, and recording doses (taken/skipped), the intake history screen and appointments are not built yet. Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -29,10 +29,11 @@ Installed now (versions as resolved by `package-lock.json`):
 | Styling | tailwindcss, @tailwindcss/vite | 4.3.3 |
 | Unit/component tests | vitest, jsdom, @testing-library/react, jest-dom, user-event | 5.0.5, 29.1.1, 16.3.3, 7.0.1, 14.6.8 |
 | End-to-end tests | @playwright/test | 1.64.1 |
+| Forms and validation | react-hook-form, zod, @hookform/resolvers | 7.90.0, 4.6.7, 5.9.1 |
 | Linting | eslint, typescript-eslint, react-hooks, jsx-a11y, react-refresh plugins | 9.39.5, 8.71.2, 7.1.1, 6.10.2, 0.5.7 |
 | Formatting | prettier | 3.9.10 |
 
-Planned for later stages: React Hook Form + Zod (stage 5), Supabase (stages 10–11), TanStack Query (stage 11), Vercel (stage 9).
+Planned for later stages: Supabase (stages 10–11), TanStack Query (stage 11), Vercel (stage 9).
 
 Notes on version choices: ESLint is on the 9.x line because `eslint-plugin-jsx-a11y` does not yet support ESLint 10; TypeScript is on 6.0.x because `typescript-eslint` supports `<6.1`; React Router is on 7.x (stable, Node >= 20) rather than 8.x (requires Node >= 22.22).
 
@@ -86,7 +87,8 @@ The data layer sits behind interfaces (`src/services/repositories.ts`) so that t
 | Typed errors with Polish messages | `src/services/errors.ts` |
 | Clock, id generator | `src/utils/clock.ts`, `src/utils/id.ts` |
 | Services provider and hooks | `src/app/ServicesProvider.tsx`, `src/hooks/useServices.ts`, `src/hooks/useAsyncData.ts` |
-| Data hooks | `useMedications`, `useDoseLogs`, `useAppointments` in `src/features/*/hooks/` |
+| Data hooks | `useMedications`, `useMedication(id)`, `useDoseLogs`, `useAppointments` in `src/features/*/hooks/` |
+| Write helper | `useAsyncAction` (`src/hooks/`): one write at a time, unmount-safe, reports success/failure |
 
 **Storage keys and format.** One key per kind of record, each holding `{ "version": 1, "items": [ ... ] }`:
 
@@ -110,7 +112,17 @@ A reset first copies whatever is stored, even damaged data, to the backup key, s
 
 **Running the repository contract tests.** `npm test` runs everything. To run only the data layer: `npx vitest run src/services`. The contract (`src/services/contract/repositoryContract.ts`) describes behaviour every implementation must have and knows nothing about `localStorage`; `src/services/local/localRepositories.test.ts` runs it against the browser-storage implementation, and the Supabase implementation of stage 11 is meant to run the same suite. Tests use a controllable fake storage (`src/test/fakeStorage.ts`) instead of the real one.
 
-**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); screens that use the data (stages 5 to 8); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
+**Intentionally deferred.** Supabase, authentication and per-user data (stages 10 and 11); TanStack Query (stage 11); screens that use the data for doses, appointments and the dashboard (stages 6 to 8); a user-facing way to load or reset demo data (a later decision, for the public demo in stage 9); updating one browser tab when another changes data (tabs are not coordinated: the last write wins).
+
+### Medications (stage 5)
+
+Routes: `/medications` (list), `/medications/new` (add), `/medications/:medicationId/edit` (edit).
+
+- **List**: loading, error (with retry), empty and populated states. Each card shows name, status (*Aktywny* / *Zaplanowany* / *Zakończony*, always as text), period, schedule, the stock estimate and notes. Sample records carry an *Przykład* badge. Stock is never invented: without a recorded quantity the card says the estimate is unavailable and why.
+- **Add/edit form** (React Hook Form + Zod; the Zod schema only adapts the plain Stage 2 rules, which stay the single source of truth): schedule rows can be added, removed and edited, duplicate times and invalid dates, times or quantities are rejected with Polish messages tied to their fields, input is kept when validation fails, and a double submit saves one medication.
+- **Editing the schedule**: `scheduleEffectiveFrom` moves to today only when the schedule really changes (a rename or notes change leaves it alone). Intake records are never rewritten; they keep the amount and unit they were recorded with.
+- **Ending** a medication is the primary way to stop it: it sets the last day and keeps all history. **Permanent deletion** is a secondary action; its confirmation dialog states what will be lost, shows the number of intake records, and offers "end instead".
+- A medication's id is generated once per opened add form, so repeated submits cannot create two records even if the button is pressed twice.
 
 ### Component preview (development only)
 
@@ -130,8 +142,9 @@ src/hooks/               Shared React hooks (page title, services, async data)
 src/services/            Data layer: repository interfaces, browser-storage implementation, demo data
 src/pages/               One thin component per route
 src/index.css            Design tokens (colours, fonts, radii)
-src/features/            Domain types and pure business logic, one folder per feature
-                         (medications, doses, appointments); no UI yet
+src/features/            Domain types, pure business logic, hooks and (for medications) form
+                         components and Zod schemas, one folder per feature
+                         (medications, doses, appointments)
 src/types/               Shared primitive types (LocalDate, LocalTime, Timestamp, Id)
 src/utils/               Date, time-zone, quantity, clock, id and formatting helpers
 src/test/                Test setup and fixtures

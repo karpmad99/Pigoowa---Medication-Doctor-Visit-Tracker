@@ -169,6 +169,14 @@ function createDoseLogRepository(storage: KeyValueStorage): DoseLogRepository {
         return log;
       }),
 
+    countForMedication: (medicationId: Id) =>
+      run(
+        () =>
+          readCollection(storage, doseLogCollection).items.filter(
+            (log) => log.medicationId === medicationId,
+          ).length,
+      ),
+
     remove: (slot: DoseSlot) =>
       run(() => {
         const { items } = readCollection(storage, doseLogCollection);

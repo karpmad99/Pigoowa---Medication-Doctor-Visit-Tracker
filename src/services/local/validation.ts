@@ -1,6 +1,7 @@
 import { APPOINTMENT_LIMITS } from '@/features/appointments/logic/validation';
 import type { Appointment, AppointmentStatus } from '@/features/appointments/types';
 import type { DoseLog } from '@/features/doses/types';
+import { MEDICATION_LIMITS } from '@/features/medications/logic/limits';
 import { MAX_UNIT_LENGTH } from '@/features/medications/logic/stock';
 import type { Medication, MedicationStock, ScheduleTime } from '@/features/medications/types';
 import type { Id, LocalDate, LocalTime, Timestamp } from '@/types/primitives';
@@ -17,8 +18,6 @@ import { isValidQuantity } from '@/utils/quantity';
 export type Validated<T> = { ok: true; value: T } | { ok: false; path: string };
 
 const MAX_ID_LENGTH = 100;
-
-export const MEDICATION_LIMITS = { name: 120, doseUnit: MAX_UNIT_LENGTH, notes: 1000 } as const;
 
 function fail(path: string): { ok: false; path: string } {
   return { ok: false, path };

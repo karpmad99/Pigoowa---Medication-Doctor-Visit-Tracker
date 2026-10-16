@@ -1,8 +1,10 @@
 import type { RouteObject } from 'react-router';
 import { AppShell } from '@/components/layout/AppShell';
 import { Spinner } from '@/components/ui/Spinner';
+import { AddMedicationPage } from '@/pages/AddMedicationPage';
 import { AppointmentsPage } from '@/pages/AppointmentsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { EditMedicationPage } from '@/pages/EditMedicationPage';
 import { MedicationsPage } from '@/pages/MedicationsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
@@ -37,6 +39,8 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <DashboardPage /> },
       { path: 'medications', element: <MedicationsPage /> },
+      { path: 'medications/new', element: <AddMedicationPage /> },
+      { path: 'medications/:medicationId/edit', element: <EditMedicationPage /> },
       { path: 'appointments', element: <AppointmentsPage /> },
       ...developmentRoutes,
       { path: '*', element: <NotFoundPage /> },

@@ -2,11 +2,18 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { ServicesProvider } from './ServicesProvider';
+import { createTestServices } from '@/test/services';
 import { routes } from './routes';
 
 function renderAppAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  render(<RouterProvider router={router} />);
+  // The medications page reads its data through the services, so the app needs a provider.
+  render(
+    <ServicesProvider services={createTestServices()}>
+      <RouterProvider router={router} />
+    </ServicesProvider>,
+  );
   return router;
 }
 
