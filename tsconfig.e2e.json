@@ -17,5 +17,5 @@
     "noFallthroughCasesInSwitch": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["e2e"]
+  "include": ["e2e", "e2e-preview", "screenshots"]
 }

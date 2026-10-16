@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { DemoBanner } from './DemoBanner';
 import { SafetyNote } from './SafetyNote';
 
 const navigationItems: readonly {
@@ -66,6 +67,7 @@ export function AppShell() {
 
       {/* flex-1 makes this column fill the space under the top bar, so short pages do not scroll. */}
       <div className="flex flex-1 flex-col">
+        <DemoBanner />
         {/* tabIndex -1 lets the skip link move keyboard focus here without adding a tab stop. */}
         <main
           id="main-content"

@@ -16,10 +16,12 @@ const variants: Record<ButtonVariant, string> = {
   ghost: 'text-brand-700 hover:bg-brand-50',
 };
 
-// "md" is 44 px tall: a comfortable touch target on phones.
+// "md" is 44 px tall: a comfortable touch target on phones. "sm" is compact (36 px) only where a
+// mouse is the likely pointer (from the tablet width up and not on a touch screen); on a phone it is
+// 44 px too, so no button is hard to hit.
 const sizes: Record<ButtonSize, string> = {
   md: 'min-h-11',
-  sm: 'min-h-9 px-3',
+  sm: 'min-h-11 px-3 md:min-h-9 md:pointer-coarse:min-h-11',
 };
 
 /** Shared by Button and ButtonLink so a link that looks like a button is identical to one. */

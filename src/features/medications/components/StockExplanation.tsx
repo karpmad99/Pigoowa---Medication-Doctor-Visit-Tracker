@@ -5,11 +5,12 @@
  */
 export function StockExplanation() {
   return (
-    <details className="rounded-card border border-line bg-surface p-4 text-sm">
-      <summary className="cursor-pointer rounded-control font-semibold text-ink">
+    <details className="rounded-card border border-line bg-surface text-sm">
+      {/* The padding is on the summary, so the whole row is a comfortable touch target. */}
+      <summary className="cursor-pointer rounded-control p-4 font-semibold text-ink">
         Jak liczymy szacunkowy zapas?
       </summary>
-      <div className="mt-3 space-y-2 text-ink-muted">
+      <div className="space-y-2 px-4 pb-4 text-ink-muted">
         <p>
           To szacunek, a nie dokładny stan. Zaczynamy od ilości wpisanej w edycji leku i odejmujemy
           dawki <strong>przyjęte</strong>, które zapisano po wpisaniu zapasu.

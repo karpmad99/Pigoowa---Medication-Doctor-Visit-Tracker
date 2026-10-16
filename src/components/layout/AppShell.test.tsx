@@ -108,6 +108,19 @@ describe('AppShell navigation', () => {
   });
 });
 
+describe('demo notice', () => {
+  it.each(['/', '/doses', '/medications', '/appointments', '/nie-ma-takiej-strony'])(
+    'is shown on %s, also when the page is opened directly',
+    async (path) => {
+      renderAppAt(path);
+
+      expect(
+        await screen.findByRole('region', { name: 'Informacja o wersji demonstracyjnej' }),
+      ).toHaveTextContent('dane fikcyjne');
+    },
+  );
+});
+
 describe('page titles', () => {
   it('names the tab after the current page and returns to the plain app name on the home page', async () => {
     const user = userEvent.setup();

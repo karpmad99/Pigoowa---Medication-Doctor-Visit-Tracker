@@ -2,11 +2,11 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 8 of 12 complete (scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard).** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stage 9 of 12 is partly complete: tests, accessibility fixes, the demo notice and the hosting configuration are done, but the demo has not been deployed and there is no live link (see [Deployment](#deployment)), so the MVP is not yet declared complete. Stages 1–8: scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard.** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
-Pigoowa is an organisational tool. It does not give medical advice, does not recommend or change doses, and does not decide whether a medication should be taken. Schedules are configured by the user and are not verified by any healthcare professional. The planned public demo uses fictional data only.
+Pigoowa is an organisational tool. It does not give medical advice, does not recommend or change doses, and does not decide whether a medication should be taken. Schedules are configured by the user and are not verified by any healthcare professional. The demo uses fictional data only, and every page says so.
 
 ## Planned features (MVP)
 
@@ -29,11 +29,12 @@ Installed now (versions as resolved by `package-lock.json`):
 | Styling | tailwindcss, @tailwindcss/vite | 4.3.3 |
 | Unit/component tests | vitest, jsdom, @testing-library/react, jest-dom, user-event | 5.0.5, 29.1.1, 16.3.3, 7.0.1, 14.6.8 |
 | End-to-end tests | @playwright/test | 1.64.1 |
+| Accessibility checks in the browser | @axe-core/playwright (dev dependency, MPL-2.0) | 4.14.0 |
 | Forms and validation | react-hook-form, zod, @hookform/resolvers | 7.90.0, 4.6.7, 5.9.1 |
 | Linting | eslint, typescript-eslint, react-hooks, jsx-a11y, react-refresh plugins | 9.39.5, 8.71.2, 7.1.1, 6.10.2, 0.5.7 |
 | Formatting | prettier | 3.9.10 |
 
-Planned for later stages: Supabase (stages 10–11), TanStack Query (stage 11), Vercel (stage 9).
+Planned for later stages: Supabase (stages 10–11), TanStack Query (stage 11). Hosting for the demo: Vercel (configured, not deployed).
 
 Notes on version choices: ESLint is on the 9.x line because `eslint-plugin-jsx-a11y` does not yet support ESLint 10; TypeScript is on 6.0.x because `typescript-eslint` supports `<6.1`; React Router is on 7.x (stable, Node >= 20) rather than 8.x (requires Node >= 22.22).
 
@@ -67,11 +68,22 @@ No environment variables are needed yet.
 | `npm run lint` | ESLint (type-aware rules, React hooks, accessibility) |
 | `npm run format` / `format:check` | Prettier: rewrite / verify formatting of source files |
 | `npm test` / `npm run test:watch` | Vitest unit and component tests (once / watch mode) |
-| `npm run e2e` | Playwright end-to-end tests (starts the dev server itself) |
+| `npm run e2e` | Playwright end-to-end tests against the dev server (starts it itself) |
+| `npm run e2e:preview` | Playwright checks of the **production build** served as a static site (builds first) |
+| `npm run screenshots` | Regenerates `docs/screenshots` from the fictional demo data (not a test run) |
 
 ### Running end-to-end tests
 
 Install the browser once with `npx playwright install chromium`. If you already have a Chromium binary, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its path instead.
+
+The tests use a fixed clock (`2026-10-15T10:00:00Z`, time zone `Europe/Warsaw`) and fictional data, so they do not depend on the day they run. The suites are:
+
+- `e2e/journey.spec.ts`: the main journey from an empty start (add a medication, record a dose, reload, add / edit / cancel / restore an appointment) and a keyboard-only journey.
+- `e2e/accessibility.spec.ts`: axe-core scans (WCAG 2.0/2.1 A and AA plus best-practice rules) of every main screen and state at 390 px and 1280 px, and a check that touch targets are at least 44 px on phones. A self-check proves the scan reports injected problems, so "no violations" is not an empty result.
+- the feature specs (`medications`, `doses`, `appointments`, `dashboard`, `layout`, `keyboard`, `dialog`, `data`, `smoke`): behaviour, validation, failed reads and writes, keyboard operation and layout.
+- `e2e-preview/`: the production build only (see Deployment).
+
+Automated checks do not replace a manual accessibility review with a screen reader; none was done with real assistive technology.
 
 ### Data layer and demo data
 
@@ -161,7 +173,7 @@ While developing (`npm run dev`), `/dev/components` shows every UI component in 
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs typecheck, lint, format check, unit tests, build and e2e tests on every pull request and push to `main`. *(The workflow file exists; it has not yet been observed running on GitHub.)*
+`.github/workflows/ci.yml` runs typecheck, lint, format check, unit tests, build, e2e tests and the production-build checks (`e2e:preview`) on every pull request and push to `main`. *(The workflow file exists; it has not yet been observed running on GitHub.)*
 
 ### Project structure (current)
 
@@ -179,7 +191,11 @@ src/features/            Domain types, pure business logic, hooks and (for medic
 src/types/               Shared primitive types (LocalDate, LocalTime, Timestamp, Id)
 src/utils/               Date, time-zone, quantity, clock, id and formatting helpers
 src/test/                Test setup and fixtures
-e2e/                     Playwright tests
+e2e/                     Playwright tests (dev server)
+e2e-preview/             Playwright checks of the production build
+screenshots/             Generator of the README images (fictional data)
+public/                  Static files (favicon)
+vercel.json              Static hosting configuration (SPA rewrite, headers)
 docs/                    Specification, roadmap, database design
 ```
 
@@ -187,11 +203,35 @@ The full target structure is described in [docs/PROJECT_SPEC.md](docs/PROJECT_SP
 
 ## Deployment
 
-*(Planned — Vercel; instructions and live demo link will be added in stage 9.)*
+**Status: configured, not deployed.** There is no live demo and this README does not link to one. Publishing is a separate decision that has not been made.
+
+The app is a static single-page application: no backend, no environment variables, no secrets. `npm run build` produces `dist/`; any static host works if it serves `index.html` for every path that is not a file (the app has client-side routes such as `/medications`, which must survive a direct visit and a reload).
+
+For [Vercel](https://vercel.com), `vercel.json` already holds everything needed: the build command, the output directory, the rewrite of every path to `/index.html` (files in `dist/` win over the rewrite), basic security headers and long-lived caching for the hashed files in `/assets/`. To publish it yourself, import the repository in Vercel with the *Vite* preset and leave the settings as they are. Nothing in the repository does this for you.
+
+What is verified locally:
+
+- `src/deployment.test.ts` checks `vercel.json` (the rewrite, no proxying or backend settings, the headers) and that `index.html` loads nothing from other hosts.
+- `npm run e2e:preview` builds the app and serves it with `vite preview`, then checks that every main route opens directly and after a reload, that an unknown address shows the in-app "not found" page, that the development pages (`/dev/data`, `/dev/components`) are absent from the build, that the app starts with empty storage, that a medication survives a reload, and that no console error, page error or request to another host occurs.
+
+What is **not** verified: the behaviour of Vercel itself (the rewrite and headers are checked as configuration, not on a real deployment) and a Content-Security-Policy, which was left out because it could not be tested without a deployment.
+
+**The demo notice.** Every page shows a notice that the data is fictional, is stored only in this browser (`localStorage`), is not encrypted, and that real medical or personal data must not be entered. The notice cannot be dismissed.
+
+**Demo limits.**
+
+- The production build starts **empty**. The sample data loader exists only in development (`/dev/data`); visitors enter their own, invented data. A "load sample data" button for visitors was deliberately not added.
+- Data lives in one browser profile: it is not shared between devices or browsers, and clearing site data deletes it.
+- No accounts, no sync, no reminders or notifications, no offline support (not a PWA).
 
 ## Screenshots
 
-*(Planned — added in stage 9.)*
+All images are generated from the invented demo data with a fixed date (`npm run screenshots`); they contain no real data.
+
+| | |
+|---|---|
+| ![Dashboard on a desktop screen](docs/screenshots/dashboard-desktop.png) | ![Dashboard on a phone](docs/screenshots/dashboard-phone.png) |
+| ![Medication list](docs/screenshots/medications.png) | ![Appointment list](docs/screenshots/appointments.png) |
 
 ## Language convention
 
