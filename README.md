@@ -2,7 +2,9 @@
 
 **Medication and doctor appointment tracker** — a web application for organising medications, dosage schedules, intake history and doctor appointments. The user interface is in Polish.
 
-> **Project status: Stage 9 of 12 is partly complete: tests, accessibility fixes, the demo notice and the hosting configuration are done, but the demo has not been deployed and there is no live link (see [Deployment](#deployment)), so the MVP is not yet declared complete. Stages 1–8: scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard.** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+**Live demo: <https://pigoowa-medication-doctor-visit-tra.vercel.app/>**: fictional data only. Everything you enter is kept in your own browser (`localStorage`), unencrypted, so use invented data and never real medical or personal data. See [Deployment](#deployment).
+
+> **Project status: Stage 9 of 12 is nearly complete: tests, accessibility fixes, the demo notice and the hosting configuration are done and the public demo is deployed (see [Deployment](#deployment)); a manual check of the live demo on a phone is still open, so the MVP is not yet declared complete. Stages 1–8: scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard.** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -34,7 +36,7 @@ Installed now (versions as resolved by `package-lock.json`):
 | Linting | eslint, typescript-eslint, react-hooks, jsx-a11y, react-refresh plugins | 9.39.5, 8.71.2, 7.1.1, 6.10.2, 0.5.7 |
 | Formatting | prettier | 3.9.10 |
 
-Planned for later stages: Supabase (stages 10–11), TanStack Query (stage 11). Hosting for the demo: Vercel (configured, not deployed).
+Planned for later stages: Supabase (stages 10–11), TanStack Query (stage 11). Hosting for the demo: Vercel (deployed, see [Deployment](#deployment)).
 
 Notes on version choices: ESLint is on the 9.x line because `eslint-plugin-jsx-a11y` does not yet support ESLint 10; TypeScript is on 6.0.x because `typescript-eslint` supports `<6.1`; React Router is on 7.x (stable, Node >= 20) rather than 8.x (requires Node >= 22.22).
 
@@ -203,18 +205,20 @@ The full target structure is described in [docs/PROJECT_SPEC.md](docs/PROJECT_SP
 
 ## Deployment
 
-**Status: configured, not deployed.** There is no live demo and this README does not link to one. Publishing is a separate decision that has not been made.
+**Status: deployed.** The public demo is at <https://pigoowa-medication-doctor-visit-tra.vercel.app/> (Vercel). The project owner deployed it from this repository; the build log shows branch `claude/focused-keller-4a79xq`, commit `490cb55`, built with `npm ci` and `npm run build`. It holds no data of its own: every visitor sees an empty app and keeps whatever they enter in their own browser.
 
 The app is a static single-page application: no backend, no environment variables, no secrets. `npm run build` produces `dist/`; any static host works if it serves `index.html` for every path that is not a file (the app has client-side routes such as `/medications`, which must survive a direct visit and a reload).
 
-For [Vercel](https://vercel.com), `vercel.json` already holds everything needed: the build command, the output directory, the rewrite of every path to `/index.html` (files in `dist/` win over the rewrite), basic security headers and long-lived caching for the hashed files in `/assets/`. To publish it yourself, import the repository in Vercel with the *Vite* preset and leave the settings as they are. Nothing in the repository does this for you.
+For [Vercel](https://vercel.com), `vercel.json` already holds everything needed: the build command, the output directory, the rewrite of every path to `/index.html` (files in `dist/` win over the rewrite), basic security headers and long-lived caching for the hashed files in `/assets/`. To publish your own copy, import the repository in Vercel with the *Vite* preset and leave the settings as they are; no environment variables are needed. Nothing in the repository deploys the app for you.
 
 What is verified locally:
 
 - `src/deployment.test.ts` checks `vercel.json` (the rewrite, no proxying or backend settings, the headers) and that `index.html` loads nothing from other hosts.
 - `npm run e2e:preview` builds the app and serves it with `vite preview`, then checks that every main route opens directly and after a reload, that an unknown address shows the in-app "not found" page, that the development pages (`/dev/data`, `/dev/components`) are absent from the build, that the app starts with empty storage, that a medication survives a reload, and that no console error, page error or request to another host occurs.
 
-What is **not** verified: the behaviour of Vercel itself (the rewrite and headers are checked as configuration, not on a real deployment) and a Content-Security-Policy, which was left out because it could not be tested without a deployment.
+Checked **by hand by the project owner on the live demo** (not by an automated test, and not repeated by the assistant): the dashboard opens and shows the demo notice; `/medications`, `/doses` and `/appointments` open directly and survive a reload; a fictional medication is saved and is still there after a reload; the security response headers were inspected in the browser's developer tools and with `curl`; `/dev/data` does not offer the development panel.
+
+**Not yet checked on the live demo:** use on a phone, the browser console and network requests on the live site, the other routes (`/doses/history`, `/medications/new`, `/appointments/new`, the in-app "not found" page, `/dev/components`), and a screen reader. There is also no Content-Security-Policy, and GitHub Actions has not been observed running (the workflow starts on pushes to `main` and on pull requests, and this repository currently has only the working branch).
 
 **The demo notice.** Every page shows a notice that the data is fictional, is stored only in this browser (`localStorage`), is not encrypted, and that real medical or personal data must not be entered. The notice cannot be dismissed.
 
