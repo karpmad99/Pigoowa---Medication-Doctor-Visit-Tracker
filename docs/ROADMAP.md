@@ -18,6 +18,15 @@ Legend: ☐ not started · ◐ in progress · ☑ done
 | 7 | Doctor appointments | ☑ |
 | 8 | Dashboard | ☑ |
 | 9 | End-to-end tests, accessibility, demo deployment (MVP complete) | ◐ (deployed; a phone check of the live demo is still open) |
+| F0 | Medication features: decisions and documentation | ◐ (decisions approved; the final text awaits the owner's review) |
+| F1 | Medication features: storage v2 migration | ☐ |
+| F2 | Medication features: time field | ☐ |
+| F3 | Medication features: visual refresh, next unrecorded dose | ☐ |
+| F4 | Medication features: dosage form, units and strength | ☐ |
+| F5 | Medication features: details page and own low-stock threshold | ☐ |
+| F6 | Medication features: stock events and refill | ☐ |
+| F7 | Medication features: wasted medicine | ☐ |
+| F8 | Medication features: actually taken amount and note | ☐ |
 | 10 | Supabase schema and Row Level Security | ☐ |
 | 11 | Authentication and Supabase persistence | ☐ |
 | 12 | Pre-release review (privacy, security, limitations) | ☐ |
@@ -214,9 +223,189 @@ Completion criteria:
 - [x] README has screenshots, live link, accurate setup instructions (the link is the one the owner supplied; the screenshots come from fictional data).
 - [x] All standard checks pass (results in the stage 9 report). GitHub CI has not been observed. **The MVP is not declared complete until the open criterion (the live demo on mobile) is confirmed.**
 
+## Medication features track (F0–F8): planned before Stage 10
+
+Not part of the original stage list. The owner accepted an audit of the dashboard, doses and medication screens and asked for the changes below. The track sits between Stage 9 and Stage 10 because it changes the data model, and `DATABASE.md` must contain the new fields and the stock events table **before** the Stage 10 schema is made (PROJECT_SPEC DEC-51). The letters F0 to F8 avoid renumbering stages 10 to 12, which other documents refer to. **Stage 9 stays open** (the phone check of the live demo) and is not affected by this track.
+
+The decisions are DEC-44 to DEC-53 in PROJECT_SPEC; the requirements are §4.5 (F-1 to F-9); the rules are §7.6 and §10.5; the database design is DATABASE.md §3.2, §3.4, §3.6 and §9. **Nothing of this exists in the code yet**: every item below, except F0, is planned.
+
+Order and dependencies. F1 comes first among the data stages, because the first new persisted fields (F4) and the new collection (F6) must not be written in the version 1 format. F2 and F3 change no data.
+
+| Stage | Needs | Why |
+|---|---|---|
+| F0 | none | documentation only |
+| F1 | F0 approved | the migration and the write gate (PROJECT_SPEC §10.5) |
+| F2 | F0 approved | no data change |
+| F3 | F0 approved | no data change; the highlight is a pure function |
+| F4 | F1 | first new persisted fields (`dosageForm`, `strength`) |
+| F5 | F1, F4 | the threshold is persisted, and its unit comes from the lists of F4 |
+| F6 | F1, F5 | new collection, `MedicationStock.basis`, and the details page that holds the actions |
+| F7 | F6 | uses the stock events |
+| F8 | F1 | persists `takenAmount` and `note`; independent of F4 to F7 |
+| Stage 10 | F0 approved | the schema in DATABASE.md already contains every planned column and table |
+| Stage 11 | Stage 10 | the Supabase repositories must satisfy the same contract tests, including stock events |
+
+Building F1 to F8 before Stage 10 is **planned, not required** (DEC-51). If Stage 10 comes first, it must still create every planned column and table of DATABASE.md, and the F-stages then also need the Supabase side; nothing in F1 to F8 depends on a database.
+
+### F0 — Decisions and documentation ◐
+
+Scope: write the approved decisions down, in PROJECT_SPEC, DATABASE and this roadmap, before any implementation. Documentation only: no code, test, dependency or configuration changes, no migration run.
+
+Decisions recorded (owner's answers):
+1. Storage versioning: **option B**, a v1 to v2 migration with a backup and tests that data is preserved (DEC-44, §10.5).
+2. Low-stock threshold: the user's own quantity in the stock unit, a warning when `remaining <= threshold`; without a threshold the 7-day rule stays (DEC-46).
+3. **Strength** is an informational field; it is neither a dose unit nor a stock unit and takes no part in any calculation (DEC-45).
+4. A refill cannot be back-dated in the first version (DEC-47).
+5. The next unrecorded dose is highlighted on the dashboard, with no change to domain rules (DEC-50).
+6. The new models and events are described before Stage 10 (DEC-51, DATABASE.md).
+
+Decided in the second F0 pass (owner's answers):
+- **DEC-52 accepted:** both ways of starting stock tracking are kept (count, or new package). An empty quantity is never zero, and the new-package variant says that earlier leftovers are not counted. The three stock states (counted, new package, unknown) are presented differently (PROJECT_SPEC §7.6).
+- **DEC-53 accepted on condition:** the write gate, the per-collection backup, the verification and the absence of automatic deletion are kept; the mechanism is never presented as full protection against old copies, races or browser failures.
+- **Note limit of 500 characters approved**, separately for the note of a taken dose (`DoseLog`) and for the note of a stock event (`StockEvent`). A note about wasted medicine belongs to the `waste` event, not to a dose record.
+- **Migration without a backup rejected:** with no room, that collection's migration stops and a message is shown; the backup is never skipped.
+- **A restore screen on the development page deferred:** only the requirements for a future tool are written down (PROJECT_SPEC §10.5); nothing is built.
+- A `pending` collection is readable only when its original format is unambiguously recognised and supported; otherwise reading and writing are both refused (§10.5, "Recognition").
+- A backup is not enough to resume: the original, the backup and the version are compared in the same run (§10.5, "Resuming").
+- The details of how a unit outside the list is shown and kept, and how incompatible units are kept out of calculations (PROJECT_SPEC §7.6), stand as written in the second pass.
+
+Changed against the first F0 draft, not against any approved decision: the migration backup is one raw key per collection instead of one JSON value; a damaged collection no longer stops the migration of the healthy ones; the migration is described as resumable and not atomic, with its limits listed.
+
+Also recorded: the three quantities (strength, dose, stock) are kept apart; no unit conversion; units not on the new lists stay visible and are never replaced automatically; the stock events collection is part of the migration, the migration backup, the demo reset and the deletion of a medication; the risk of an older copy of the app in another tab or deployment after migration, the limits of `localStorage` and the lack of atomic writes across keys (§10.5).
+
+Completion criteria:
+- [x] PROJECT_SPEC, DATABASE and ROADMAP describe the decisions, the rules, the data model and the risks above, and mark everything as planned.
+- [x] No file outside `docs/` was changed.
+- [x] §10.5 states the collection states, the behaviour after an interruption, how an incomplete migration is recognised, the conditions for resuming, the old-copy risks, the backup policy and the quota, without describing the migration as atomic or as safe beyond what the mechanism gives.
+- [x] Notes belong to the dose record (taken doses) and to the stock event (refill, waste); the 500-character limit is approved and applies to each separately.
+- [x] The three documents agree on DEC numbers, storage keys, field names, formulas and dependencies (checked by reading them against each other).
+- [x] Documentation formatting check passes.
+- [x] The owner decided the proposals: DEC-52 accepted, DEC-53 accepted on condition, note limit approved, migration without a backup rejected, restore screen deferred.
+- [ ] The owner has reviewed the final text of the three documents.
+
+Open questions are listed under the stage that must answer them.
+
+### F1 — Storage v2 migration
+
+Scope: envelope version 2; the migration of each collection with a verbatim backup in its own key, the `meta` entry with the SHA-256 fingerprint of the backup text, the compare before the write and the read-back after it (PROJECT_SPEC §10.5); reading versions 1 and 2 per collection; the write gate and the `migration-required` error; the explicit start-up migration with a visible result for each collection and a retry; a tested function that restores one collection from its backup (no screen); a frozen copy of the current version 1 reader for the tests. No new field and no screen change apart from the messages of the migration and of a refused write.
+
+Open: when and how removal of the migration backup is offered (a later decision; never automatic, only for a verified backup, not in F1); the text that tells a user of an older tab to reload (the older code cannot be changed). **Decided:** no migration without a backup (with no room that collection stops); the restore screen is deferred, only its requirements are written down (PROJECT_SPEC §10.5).
+
+Completion criteria:
+- [ ] Migrated items equal the originals field by field; units preserved byte for byte.
+- [ ] The backup equals the original text verbatim and is read back before the rewrite; a failed or mismatching backup changes nothing.
+- [ ] The write gate: a write to a `pending` collection is refused; no version 2 write precedes the collection's backup (tested).
+- [ ] A collection whose original format is not unambiguously recognised (invalid record, `version` that is not exactly 1 or 2) is neither read, written nor migrated, and does not stop the others; only a fully recognised version 1 collection is readable as `pending`.
+- [ ] Resuming classifies the original (absent, version 1, version 2, damaged) and the backup (expected pre-migration copy, damaged or inconsistent, origin cannot be established) in each run and behaves as the table in §10.5 says; the existence of a backup alone never lets a step be skipped.
+- [ ] The version 1 backup of a collection that is already version 2 is never written, replaced or deleted by the migration, even though it differs from the original; in particular an interruption after the version 2 write and before the verification leaves it byte for byte unchanged and the next start verifies it (tested with a write spy).
+- [ ] The provenance entry carries the SHA-256 of the exact backup text (computed synchronously by a small pure function, no new dependency, tested against published vectors including the empty text, and against an independent reference for non-ASCII text) and is written before the rewrite; a failure to write it stops that collection.
+- [ ] A backup is classified as the expected pre-migration copy only if its exact text has the recorded fingerprint: a valid version 1 text with the same length and record count but another text is not accepted (tested); a missing or mismatching fingerprint never causes a write to the backup of a `migrated` collection.
+- [ ] `verifiedAt` is set only after both identity (the fingerprint, checked again at the moment it is set) and agreement (the migrated items equal the backup's items) have been checked; a merely valid version 1 text never sets it, and a backup that changed after step 3 is reported and does not set it (tested).
+- [ ] The time to compute the fingerprint on a collection of the size estimated in PROJECT_SPEC §10.5 is measured and reported.
+- [ ] No room for a collection's backup stops that collection with a message; no code path migrates without a backup.
+- [ ] A storage that fails at every step in turn leaves a state the new code reads and the next start finishes; running twice changes nothing.
+- [ ] A second tab changing the text between the compare and the write is retried, then reported (`changed-concurrently`); the remaining race window is documented as not excluded.
+- [ ] The frozen version 1 reader refuses version 2 data and writes nothing (tested).
+- [ ] Reading never migrates or writes.
+- [ ] Restore round trip works and is refused without the confirmation.
+- [ ] No backup is ever deleted by the code.
+- [ ] All standard checks pass.
+
+### F2 — Time field
+
+Scope: the text time field with normalisation, quick picks and an optional system picker (DEC-49) in the medication schedule and the appointment form. No data change.
+
+Completion criteria:
+- [ ] Unit tests for every accepted and rejected format; component tests for typing, normalisation, quick picks and messages.
+- [ ] Works at phone width in the browser tests, with the keyboard, and with the system picker where available.
+- [ ] A checklist of manual tests on real devices (iOS Safari, Android Chrome) is done and recorded; automated tests cannot reproduce the system pickers.
+- [ ] Accessibility scan and touch-target test pass.
+- [ ] All standard checks pass.
+
+### F3 — Visual refresh and next unrecorded dose
+
+Scope: module cards, larger headings and dose rows, larger badges, a darker card border, a clearer low-stock line on the dashboard and the highlight of the next unrecorded dose (DEC-50). No domain rule changes; no new colours beyond one accent and the existing warning colour.
+
+Open: the wording and look of the highlight.
+
+Completion criteria:
+- [ ] New colour pairs are checked by `tokens.test.ts`; the axe scans and touch-target tests pass at 360, 390 and 1280 px.
+- [ ] The selection of the highlighted dose is a tested pure function that does not read the clock.
+- [ ] No percentage or score appears; the wording stays neutral.
+- [ ] All standard checks pass.
+
+### F4 — Dosage form, units and strength
+
+Scope: `dosageForm`, the unit lists, the handling of stored units that are not on a list, `strength` (DEC-45). The first stage that persists new fields; it needs F1.
+
+Open: the final unit lists (the table in PROJECT_SPEC §7.6 is the proposal); how an unlisted unit is shown in the select.
+
+Completion criteria:
+- [ ] A medication saved before this stage opens, shows its unit unchanged and can be saved without changing it.
+- [ ] A stored unit that is not on the list is the first, selected option, labelled as outside the list; saving without touching it stores the original text byte for byte; once another unit is saved the old one cannot be chosen again (tested).
+- [ ] No unit is converted or replaced automatically; the strength never changes any estimate (tested).
+- [ ] The form says at once when the stock unit differs from the dose unit, and no number is computed for such a medication (tested through `estimateStock` and the form).
+- [ ] `strength` is not part of the input of the stock logic and changing it never changes an estimate (tested).
+- [ ] Contract, validation and demo data tests cover the new fields.
+- [ ] All standard checks pass.
+
+### F5 — Details page and own low-stock threshold
+
+Scope: the medication details page (`/medications/:id`), the threshold with its unit, the rule of DEC-46 and the warning on the details page and the dashboard.
+
+Open: whether the details page replaces some actions on the list card.
+
+Completion criteria:
+- [ ] The warning follows `remaining <= threshold` when it applies and the 7-day rule otherwise; a threshold in another unit is not applied and the page says so.
+- [ ] Unavailable estimates are never "low".
+- [ ] Page, logic and browser tests; accessibility scan of the new page.
+- [ ] All standard checks pass.
+
+### F6 — Stock events and refill
+
+Scope: the `StockEvent` model and repository, the estimate with events, *Zacznij śledzić zapas* with `MedicationStock.basis` (DEC-52), the refill dialog and the history of stock events, reversal, deletion with the medication, demo reset and backup including the events (DEC-47, PROJECT_SPEC §7.6, §10.5).
+
+Open: whether a refill is allowed for an ended medication.
+
+Completion criteria:
+- [ ] Every refill row of the §7.6 action table is tested through the real code path.
+- [ ] A double submit gives one event; a failed write keeps the form and shows an error.
+- [ ] Repository contract tests: duplicate id, missing medication, cascade, reversal, repeated reversal.
+- [ ] Deleting a medication removes its events (with rollback tests); the demo reset and its backup include the events.
+- [ ] *Zacznij śledzić zapas* offers "counted" and "new package" (DEC-52): an empty field is refused and never stored as zero; `basis` is stored and the screens say what is and is not counted; doing neither leaves the estimate unavailable.
+- [ ] A refill without a stock baseline is refused and the page offers to start tracking.
+- [ ] The note of an event is stored on the event.
+- [ ] The three stock states (counted, new package, unknown) have distinct statements on every screen that shows stock; *od nowego opakowania* stays wherever the number appears; the unknown state shows no number, no zero and no warning (tested).
+- [ ] All standard checks pass.
+
+### F7 — Wasted medicine
+
+Scope: the `waste` event, its dialog and reversal (DEC-47). It never marks a dose and is never a skipped dose.
+
+Open: the wording of the warning when the amount exceeds the estimate.
+
+Completion criteria:
+- [ ] The estimate drops by the amount; no dose status changes and no dose record is touched (tested).
+- [ ] The note is stored on the `waste` event and nowhere else.
+- [ ] Reversal restores the estimate and keeps the history.
+- [ ] Page and browser tests; accessibility scan.
+- [ ] All standard checks pass.
+
+### F8 — Actually taken amount and note
+
+Scope: `takenAmount` and `note` on taken doses, the action that edits them, the changed messages in the dose row and the history, the use in the estimate (DEC-48).
+
+Completion criteria:
+- [ ] The plan (`doseAmount`) is never overwritten; both amounts are shown.
+- [ ] The note is stored on the dose record, only for a taken dose, and a note about wasted medicine is never stored there.
+- [ ] Skipped removes the taken amount; editing never moves `recordedAt`; the same value is unchanged; a changed-meanwhile record is refused (tested).
+- [ ] The schedule and the recommendation are not touched.
+- [ ] The estimate uses the amount actually taken (every taken row of the §7.6 action table).
+- [ ] All standard checks pass.
+
 ## Stage 10 — Supabase schema and Row Level Security
 
-Scope: local Supabase stack, migrations for all tables in DATABASE.md, RLS policies, constraints, seed data, pgTAP tests, two-account integration tests. No UI changes.
+Scope: local Supabase stack, migrations for all tables in DATABASE.md **including the tables, columns and constraints marked planned for the medication features track (F0–F8; DATABASE.md §3.2, §3.4, §3.6, §9)**, RLS policies, constraints, seed data, pgTAP tests, two-account integration tests. No UI changes.
 
 Completion criteria:
 - [ ] Database can be recreated from migrations alone.
