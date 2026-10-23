@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAppMode } from '@/app/appMode';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
+import { DataManagementDialog } from '@/components/auth/DataManagementDialog';
 
 /**
  * Shown on every page of a signed-in account instead of the demonstration banner: whose data this is, how to
@@ -12,6 +13,8 @@ export function AccountBar() {
   const mode = useAppMode();
   const [failed, setFailed] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isDataDialogOpen, setIsDataDialogOpen] = useState(false);
+
   if (mode.kind !== 'account') return null;
   const { signOut } = mode;
 
@@ -20,26 +23,39 @@ export function AccountBar() {
       aria-label="Konto"
       className="border-b border-line bg-surface px-4 py-3 text-sm sm:px-6 md:px-8"
     >
+      <DataManagementDialog
+        isOpen={isDataDialogOpen}
+        onClose={() => setIsDataDialogOpen(false)}
+      />
       <div className="mx-auto flex max-w-4xl flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p>
             Zalogowano jako <strong>{mode.email}</strong>
           </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            isLoading={isSigningOut}
-            onClick={() => {
-              setFailed(false);
-              setIsSigningOut(true);
-              void signOut().then((result) => {
-                setIsSigningOut(false);
-                setFailed(!result.ok);
-              });
-            }}
-          >
-            Wyloguj się
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsDataDialogOpen(true)}
+            >
+              Zarządzaj danymi
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              isLoading={isSigningOut}
+              onClick={() => {
+                setFailed(false);
+                setIsSigningOut(true);
+                void signOut().then((result) => {
+                  setIsSigningOut(false);
+                  setFailed(!result.ok);
+                });
+              }}
+            >
+              Wyloguj się
+            </Button>
+          </div>
         </div>
         {failed && (
           <p role="alert" className="font-medium text-danger-700">
