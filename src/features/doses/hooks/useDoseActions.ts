@@ -1,21 +1,44 @@
 import { useCallback, useState } from 'react';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useServices } from '@/hooks/useServices';
+import { formatAmount } from '@/features/medications/logic/unitForms';
 import {
   applyDoseAction,
+  applyTakenDetails,
   doseActionErrorMessages,
   isConflictRepositoryError,
   isStaleScreenError,
   type DoseActionOutcome,
   type DoseTarget,
 } from '../applyDoseAction';
+import type { TakenDetails } from '../logic/recording';
 import { doseSlotKey } from '../logic/slots';
-import type { ScheduledDose } from '../types';
+import type { DoseLog, ScheduledDose } from '../types';
 
 /** The one write in flight: which slot, and what was asked for. */
 export interface PendingDoseAction {
   slotKey: string;
-  target: DoseTarget;
+  /** `details` is the dialog that records the amount actually taken and a note. */
+  target: DoseTarget | 'details';
+}
+
+/** How the dialog for the amount actually taken and the note ended. */
+export type DetailsResult =
+  /** Another write was running: nothing started. */
+  | { status: 'ignored' }
+  /** Written (or already as asked). The dialog closes. */
+  | { status: 'saved' }
+  /** The screen was out of date: nothing was written, the page was refreshed and says so. The dialog closes. */
+  | { status: 'stale' }
+  /** Not written; the reason is for the dialog, which stays open with what was typed. */
+  | { status: 'failed'; message: string };
+
+/** The sentence that says both amounts, so the plan and what was taken are never confused. */
+function amountsSentence(log: DoseLog): string {
+  const planned = formatAmount(log.doseAmount, log.doseUnit);
+  return log.takenAmount === undefined
+    ? `Przyjęto zgodnie z planem: ${planned}.`
+    : `Przyjęto ${formatAmount(log.takenAmount, log.doseUnit)}, planowano ${planned}.`;
 }
 
 /** The honest outcome of the last action. A success is only ever set after the write finished. */
@@ -28,7 +51,9 @@ function successMessage(dose: ScheduledDose, outcome: Extract<DoseActionOutcome,
     case 'created':
       return outcome.log?.status === 'skipped'
         ? `Zapisano jako pominiętą: ${label}.`
-        : `Zapisano jako przyjętą: ${label}.`;
+        : outcome.log?.takenAmount === undefined
+          ? `Zapisano jako przyjętą: ${label}.`
+          : `Zapisano jako przyjętą: ${label}. ${amountsSentence(outcome.log)}`;
     case 'updated':
       return `Zmieniono zapis: ${label} — teraz ${outcome.log?.status === 'skipped' ? 'pominięta' : 'przyjęta'}.`;
     case 'unchanged':
@@ -106,9 +131,63 @@ export function useDoseActions({ onRefresh }: { onRefresh: () => void }) {
     [run, repositories, clock, timeZone, createId, onRefresh],
   );
 
+  /**
+   * Records a dose as taken with the amount actually taken and a note, or edits those on a taken
+   * dose (see `applyTakenDetails`). Shares the single write slot with `perform`.
+   */
+  const performDetails = useCallback(
+    async (dose: ScheduledDose, details: TakenDetails): Promise<DetailsResult> => {
+      const outcome = await run(() => {
+        setPending({ slotKey: doseSlotKey(dose), target: 'details' });
+        setFeedback(null);
+        return applyTakenDetails({
+          repositories,
+          dose,
+          details,
+          now: clock.now(),
+          timeZone,
+          createId,
+        });
+      });
+      if (outcome.status === 'ignored') return { status: 'ignored' };
+      setPending(null);
+
+      if (outcome.status === 'failed') {
+        if (isConflictRepositoryError(outcome.error)) onRefresh();
+        return { status: 'failed', message: outcome.error.message };
+      }
+      const result = outcome.value;
+      if (result.ok) {
+        const label = `${dose.medicationName}, ${dose.time}`;
+        setFeedback({
+          kind: 'success',
+          message:
+            result.change === 'unchanged'
+              ? `Ta dawka miała już taki zapis: ${label}. Nic nie zmieniono.`
+              : result.change === 'created'
+                ? successMessage(dose, result)
+                : `Zapisano zmiany: ${label}. ${result.log === null ? '' : amountsSentence(result.log)}`,
+        });
+        onRefresh();
+        return { status: 'saved' };
+      }
+      if (isStaleScreenError(result.error)) {
+        setFeedback({
+          kind: 'error',
+          title: 'Nie zapisano zmiany',
+          message: doseActionErrorMessages[result.error],
+        });
+        onRefresh();
+        return { status: 'stale' };
+      }
+      return { status: 'failed', message: doseActionErrorMessages[result.error] };
+    },
+    [run, repositories, clock, timeZone, createId, onRefresh],
+  );
+
   const dismissFeedback = useCallback(() => {
     setFeedback(null);
   }, []);
 
-  return { perform, pending, feedback, dismissFeedback };
+  return { perform, performDetails, pending, feedback, dismissFeedback };
 }

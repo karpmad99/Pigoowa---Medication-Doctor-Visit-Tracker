@@ -1,8 +1,10 @@
 import type { Appointment } from '@/features/appointments/types';
 import type { DoseLog, DoseSlot } from '@/features/doses/types';
 import type { Medication } from '@/features/medications/types';
-import type { Id, LocalDate } from '@/types/primitives';
+import type { StockEvent } from '@/features/stock/types';
+import type { Id, LocalDate, Timestamp } from '@/types/primitives';
 import type { Clock } from '@/utils/clock';
+import type { StorageMigration } from './migrationReport';
 
 // The contract between the application and wherever data lives. The UI and the data hooks know
 // only these interfaces. Today the implementation keeps data in the browser (`./local`); stage 11
@@ -26,7 +28,8 @@ export interface MedicationRepository {
   /** Replaces the stored medication with the same id. Intake history is not touched. Rejects with `not-found`. */
   update(medication: Medication): Promise<Medication>;
   /**
-   * Permanently deletes the medication AND its intake history (PROJECT_SPEC DEC-09). Ending a
+   * Permanently deletes the medication AND its intake history and stock events (PROJECT_SPEC
+   * DEC-09, DEC-47), rolling back if a later write fails. Ending a
    * medication with an end date, via `update`, is the way to keep the history. Rejects with `not-found`.
    */
   remove(id: Id): Promise<void>;
@@ -64,10 +67,35 @@ export interface AppointmentRepository {
   remove(id: Id): Promise<void>;
 }
 
+export interface StockEventRepository {
+  /** Every event, oldest first (by `recordedAt`, then id). */
+  list(): Promise<StockEvent[]>;
+  /** The events of one medication, oldest first. An unknown id has none (not an error). */
+  listForMedication(medicationId: Id): Promise<StockEvent[]>;
+  /**
+   * Appends an event: ONE write to ONE collection. Rejects with `duplicate-id` if the id is taken
+   * (so an operation repeated with the same id, such as a double submit, cannot record twice),
+   * `missing-reference` if the medication does not exist, `invalid-input` if the event is invalid.
+   * The repository holds no business rule: that a refill needs a baseline and uses the stock unit
+   * is checked by the caller (`src/features/stock/logic`).
+   */
+  append(event: StockEvent): Promise<StockEvent>;
+  /**
+   * Marks the event as reversed at `reversedAt`: it stays in the history and no longer counts.
+   * Reversing an event that is already reversed changes nothing and returns it as it is. Events are
+   * never deleted by this repository (only together with their medication). Rejects with
+   * `not-found`, and with `invalid-input` for a moment before the event was recorded.
+   */
+  reverse(id: Id, reversedAt: Timestamp): Promise<StockEvent>;
+  /** How many events belong to the medication: what deleting it would destroy along with it. */
+  countForMedication(medicationId: Id): Promise<number>;
+}
+
 export interface Repositories {
   medications: MedicationRepository;
   doseLogs: DoseLogRepository;
   appointments: AppointmentRepository;
+  stockEvents: StockEventRepository;
 }
 
 /**
@@ -93,4 +121,6 @@ export interface AppServices {
   createId: () => Id;
   repositories: Repositories;
   demoData: DemoDataControls;
+  /** The start-up storage migration (PROJECT_SPEC §10.5): its latest result, and a way to run it again. */
+  storageMigration: StorageMigration;
 }

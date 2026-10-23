@@ -84,11 +84,23 @@ describe('add medication: the form', () => {
     await user.click(field('Nazwa leku'));
     await user.keyboard('Demoxal');
     await user.tab();
+    expect(screen.getByRole('combobox', { name: 'Postać leku' })).toHaveFocus();
+    await user.tab();
     expect(field('Jednostka dawki')).toHaveFocus();
     await user.keyboard('tabletka');
+    // The optional strength (a number, then its unit) comes before the schedule.
+    await user.tab();
+    expect(field('Moc: liczba')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('combobox', { name: 'Moc: jednostka' })).toHaveFocus();
     await user.tab();
     expect(timeField(1)).toHaveFocus();
     setTime(1, '08:00');
+    // Then the clock, and the quick picks as one stop, before the dose.
+    await user.tab();
+    expect(screen.getByLabelText('Wybierz z zegara godzinę 1')).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Ustaw 08:00' })).toHaveFocus();
     await user.tab();
     expect(field(/^Dawka 1/)).toHaveFocus();
     await user.keyboard('1{Enter}');
@@ -113,9 +125,11 @@ describe('add medication: validation', () => {
     });
     expect(name).toHaveAccessibleDescription('Wpisz nazwę leku.');
     expect(field(/^Jednostka dawki/)).toHaveAccessibleDescription(
-      expect.stringContaining('Wpisz jednostkę dawki'),
+      expect.stringContaining('Wybierz lub wpisz jednostkę dawki'),
     );
-    expect(timeField(1)).toHaveAccessibleDescription('Wybierz poprawną godzinę.');
+    expect(timeField(1)).toHaveAccessibleDescription(
+      'Wpisz godzinę w formacie GG:MM, na przykład 07:30.',
+    );
     expect(field(/^Dawka 1/)).toHaveAccessibleDescription(
       expect.stringContaining('Wpisz dawkę większą od zera'),
     );
@@ -779,7 +793,7 @@ describe('edit medication', () => {
       await user.type(field(/^Jednostka dawki/), 'ml');
 
       expect(
-        screen.getByText(/Zapas jest zapisany w jednostce „tabletka”, a jednostka dawki to „ml”/),
+        screen.getByText(/Zapas jest liczony w jednostce „tabletka”, a dawka w jednostce „ml”/),
       ).toBeVisible();
       await user.click(submit('Zapisz zmiany'));
       await screen.findByText(/Zapisano zmiany/);
@@ -793,7 +807,7 @@ describe('edit medication', () => {
     it('does not warn when the unit is the same', async () => {
       await setup();
 
-      expect(screen.queryByText(/Zapas jest zapisany w jednostce/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Zapas jest liczony w jednostce/)).not.toBeInTheDocument();
     });
   });
 

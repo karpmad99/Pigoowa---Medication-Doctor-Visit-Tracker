@@ -13,6 +13,9 @@ import { useDoseLogs } from '@/features/doses/hooks/useDoseLogs';
 import { EndMedicationDialog } from '@/features/medications/components/EndMedicationDialog';
 import { MedicationCard } from '@/features/medications/components/MedicationCard';
 import { useMedications } from '@/features/medications/hooks/useMedications';
+import { StockFeedback } from '@/features/stock/components/StockFeedback';
+import { useStockActions } from '@/features/stock/hooks/useStockActions';
+import { useStockEvents } from '@/features/stock/hooks/useStockEvents';
 import { endMedication } from '@/features/medications/logic/endMedication';
 import { getMedicationStatus } from '@/features/medications/logic/status';
 import { estimateStock, type StockEstimate } from '@/features/medications/logic/stock';
@@ -34,9 +37,12 @@ interface DeletionTarget {
   medication: Medication;
   /** How many intake records will be destroyed with it, counted before asking for confirmation. */
   historyCount: number;
+  /** How many stock events (refills, waste) will be destroyed with it. */
+  stockEventCount: number;
 }
 
 const recordsWord = { one: 'zapis', few: 'zapisy', many: 'zapisów' };
+const eventsWord = { one: 'zdarzenie', few: 'zdarzenia', many: 'zdarzeń' };
 
 /** The medications: list, and the entry points to add, edit, end and delete. */
 export function MedicationsPage() {
@@ -47,6 +53,8 @@ export function MedicationsPage() {
   const medications = useMedications();
   // The intake history is loaded too, only because the stock estimate is computed from it.
   const doseLogs = useDoseLogs(EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE);
+  // And the stock events (refills, waste), which the estimate adds to and subtracts from the stock.
+  const stockEvents = useStockEvents();
   const action = useAsyncAction();
   const today = getLocalDateInZone(clock.now(), timeZone);
 
@@ -67,12 +75,19 @@ export function MedicationsPage() {
   const reloadAll = () => {
     medications.reload();
     doseLogs.reload();
+    stockEvents.reload();
   };
+  const stockActions = useStockActions({ onChanged: reloadAll });
 
   const stockOf = (medication: Medication): StockEstimate | 'loading' | 'failed' => {
-    if (doseLogs.isLoading) return 'loading';
-    if (doseLogs.error !== undefined) return 'failed';
-    return estimateStock({ medication, doseLogs: doseLogs.data, today });
+    if (doseLogs.isLoading || stockEvents.isLoading) return 'loading';
+    if (doseLogs.error !== undefined || stockEvents.error !== undefined) return 'failed';
+    return estimateStock({
+      medication,
+      doseLogs: doseLogs.data,
+      stockEvents: stockEvents.data,
+      today,
+    });
   };
 
   const closeEndDialog = () => {
@@ -104,9 +119,16 @@ export function MedicationsPage() {
 
   const startDelete = async (medication: Medication) => {
     setProblem(null);
-    const outcome = await action.run(() => repositories.doseLogs.countForMedication(medication.id));
+    const outcome = await action.run(async () => ({
+      history: await repositories.doseLogs.countForMedication(medication.id),
+      events: await repositories.stockEvents.countForMedication(medication.id),
+    }));
     if (outcome.status === 'success') {
-      setDeleteTarget({ medication, historyCount: outcome.value });
+      setDeleteTarget({
+        medication,
+        historyCount: outcome.value.history,
+        stockEventCount: outcome.value.events,
+      });
     } else if (outcome.status === 'failed') {
       // Without the count the consequences cannot be stated, so deletion is not offered.
       setProblem({
@@ -123,13 +145,19 @@ export function MedicationsPage() {
 
   const confirmDelete = async () => {
     if (deleteTarget === null) return;
-    const { medication, historyCount } = deleteTarget;
+    const { medication, historyCount, stockEventCount } = deleteTarget;
+    const eventsText =
+      stockEventCount === 0
+        ? ''
+        : ` oraz historią zapasu (${String(stockEventCount)} ${pluralize(stockEventCount, eventsWord)})`;
     const outcome = await action.run(() => repositories.medications.remove(medication.id));
     if (outcome.status === 'success') {
       setNotice(
-        historyCount === 0
+        historyCount === 0 && stockEventCount === 0
           ? `Usunięto lek „${medication.name}”. Nie miał zapisów w historii.`
-          : `Usunięto lek „${medication.name}” razem z historią przyjmowania (${String(historyCount)} ${pluralize(historyCount, recordsWord)}).`,
+          : historyCount === 0
+            ? `Usunięto lek „${medication.name}” razem z historią zapasu (${String(stockEventCount)} ${pluralize(stockEventCount, eventsWord)}). Nie miał zapisów w historii przyjmowania.`
+            : `Usunięto lek „${medication.name}” razem z historią przyjmowania (${String(historyCount)} ${pluralize(historyCount, recordsWord)})${eventsText}.`,
       );
       closeDeleteDialog();
       reloadAll();
@@ -172,6 +200,23 @@ export function MedicationsPage() {
                   setNotice(null);
                   void startDelete(target);
                 }}
+                onRefill={(target) => {
+                  setNotice(null);
+                  stockActions.openRefill(target);
+                }}
+                onWaste={(target) => {
+                  setNotice(null);
+                  const estimate = stockOf(target);
+                  stockActions.openWaste(
+                    target,
+                    typeof estimate !== 'string' && estimate.available ? estimate.remaining : null,
+                  );
+                }}
+                onStartTracking={(target) => {
+                  setNotice(null);
+                  stockActions.openStart(target);
+                }}
+                timeZone={timeZone}
               />
             </li>
           ))}
@@ -206,6 +251,10 @@ export function MedicationsPage() {
         )}
       </div>
 
+      <div className="mb-4">
+        <StockFeedback message={stockActions.feedback} onDismiss={stockActions.dismissFeedback} />
+      </div>
+
       {problem !== null && (
         <div className="mb-4">
           <ErrorState title={problem.title} message={problem.message} />
@@ -237,6 +286,8 @@ export function MedicationsPage() {
           {renderGroup('Zakończone', ended)}
         </div>
       )}
+
+      {stockActions.dialogs}
 
       <EndMedicationDialog
         medication={endTarget}
@@ -273,6 +324,16 @@ export function MedicationsPage() {
                 {String(deleteTarget.historyCount)}{' '}
                 {pluralize(deleteTarget.historyCount, recordsWord)}
               </strong>
+              {deleteTarget.stockEventCount > 0 && (
+                <>
+                  {' '}
+                  oraz historia zapasu:{' '}
+                  <strong>
+                    {String(deleteTarget.stockEventCount)}{' '}
+                    {pluralize(deleteTarget.stockEventCount, eventsWord)}
+                  </strong>
+                </>
+              )}
               . Tej operacji nie można cofnąć.
             </p>
             <p>

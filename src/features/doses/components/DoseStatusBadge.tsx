@@ -19,7 +19,7 @@ export function DoseStatusBadge({
   if (status === 'taken') {
     return (
       <Badge tone="success">
-        <Icon name="check" className="mr-1 size-3.5" />
+        <Icon name="check" className="mr-1.5 size-4" />
         {doseStatusLabel('taken')}
       </Badge>
     );
@@ -27,14 +27,14 @@ export function DoseStatusBadge({
   if (status === 'skipped') {
     return (
       <Badge tone="warning">
-        <Icon name="minus" className="mr-1 size-3.5" />
+        <Icon name="minus" className="mr-1.5 size-4" />
         {doseStatusLabel('skipped')}
       </Badge>
     );
   }
   return (
     <Badge tone="neutral">
-      <Icon name="clock" className="mr-1 size-3.5" />
+      <Icon name="clock" className="mr-1.5 size-4" />
       {isFuture ? 'Zaplanowana' : doseStatusLabel('unrecorded')}
     </Badge>
   );

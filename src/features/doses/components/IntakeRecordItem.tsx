@@ -43,15 +43,30 @@ export function IntakeRecordItem({
             <time dateTime={log.scheduledTime}>{log.scheduledTime}</time>
           </p>
           <p className="break-words font-medium">{medication?.name ?? 'Usunięty lek'}</p>
-          <p className="text-ink-muted">
-            Zapisana dawka: {formatAmount(log.doseAmount, log.doseUnit)}
-          </p>
+          {log.status === 'taken' && log.takenAmount !== undefined ? (
+            <>
+              <p className="font-medium">Przyjęto: {formatAmount(log.takenAmount, log.doseUnit)}</p>
+              <p className="text-ink-muted">
+                Planowano: {formatAmount(log.doseAmount, log.doseUnit)}
+              </p>
+            </>
+          ) : (
+            <p className="text-ink-muted">
+              Zapisana dawka: {formatAmount(log.doseAmount, log.doseUnit)}
+            </p>
+          )}
         </div>
         <DoseStatusBadge status={log.status} />
       </div>
       <p className="mt-2 text-sm text-ink-muted">
         Zapisano {formatTimestamp(log.recordedAt, timeZone)}.
       </p>
+      {log.status === 'taken' && log.note != null && (
+        <p className="mt-2 whitespace-pre-line break-words text-base">
+          <span className="font-semibold">Notatka: </span>
+          {log.note}
+        </p>
+      )}
       {outsideReason !== null && (
         <div className="mt-3 space-y-1">
           <Badge tone="info">Poza aktualnym harmonogramem</Badge>

@@ -30,8 +30,16 @@ export interface DoseLog {
   doseAmount: number;
   /** Unit at the moment of recording. Later edits never change it. */
   doseUnit: string;
-  /** When the user recorded (or last changed) it. */
+  /** When the user recorded (or last changed) it. Editing the amount or the note does not move it. */
   recordedAt: Timestamp;
+  /**
+   * The amount actually taken, in `doseUnit`, when it was not the planned `doseAmount` (it may be
+   * larger or smaller). Absent means "as planned". Only for a `taken` record: a skipped one never
+   * has it. The plan (`doseAmount`) is never overwritten (PROJECT_SPEC DEC-48).
+   */
+  takenAmount?: number;
+  /** What the person wrote about this dose (at most 500 characters). Only for a `taken` record. */
+  note?: string | null;
 }
 
 /** A planned dose for one day. DERIVED from schedule rules, never stored. */

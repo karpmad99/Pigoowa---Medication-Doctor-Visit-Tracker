@@ -4,12 +4,14 @@ import { ButtonLink } from '@/components/ui/ButtonLink';
 import { Icon } from '@/components/ui/Icon';
 import { isDemoId } from '@/services/demo/demoData';
 import type { LocalDate } from '@/types/primitives';
-import { formatLocalDay } from '@/utils/format';
+import { formatLocalDay, formatQuantity } from '@/utils/format';
+import { dosageFormLabel, isOutsideList } from '../logic/dosageForms';
 import { normalizeScheduleTimes } from '../logic/schedule';
 import type { MedicationStatus } from '../logic/status';
 import type { StockEstimate } from '../logic/stock';
 import type { Medication } from '../types';
 import { formatAmount } from '../logic/unitForms';
+import { StockStatement } from '@/features/stock/components/StockStatement';
 import { StockSummary } from './StockSummary';
 
 const statusLabels: Record<MedicationStatus, { text: string; tone: BadgeTone }> = {
@@ -24,6 +26,13 @@ interface MedicationCardProps {
   stock: StockEstimate | 'loading' | 'failed';
   onEnd: (medication: Medication) => void;
   onDelete: (medication: Medication) => void;
+  /** Opens "Uzupełnij zapas". Offered for a medication that has a stock and is not ended. */
+  onRefill: (medication: Medication) => void;
+  /** Opens "Zapisz stratę" (wasted medicine). Offered with the refill: for a stock, not for an ended medication. */
+  onWaste: (medication: Medication) => void;
+  /** Opens "Zacznij śledzić zapas". Offered for a medication that has no stock and is not ended. */
+  onStartTracking: (medication: Medication) => void;
+  timeZone: string;
 }
 
 function period(medication: Medication): string {
@@ -46,6 +55,10 @@ export function MedicationCard({
   stock,
   onEnd,
   onDelete,
+  onRefill,
+  onWaste,
+  onStartTracking,
+  timeZone,
 }: MedicationCardProps) {
   const headingId = `medication-${medication.id}`;
   const label = statusLabels[status];
@@ -56,6 +69,7 @@ export function MedicationCard({
   // text would otherwise glue the words together in the computed name.
   const ofMedication = <span className="sr-only">lek {medication.name}</span>;
   const endName = <span className="sr-only">{medication.name}</span>;
+  const ofTheMedication = <span className="sr-only">leku {medication.name}</span>;
 
   return (
     <article
@@ -77,6 +91,23 @@ export function MedicationCard({
           <dt className="font-semibold">Okres</dt>
           <dd>{period(medication)}</dd>
         </div>
+        {medication.dosageForm !== undefined && (
+          <div className="grid gap-1 sm:grid-cols-[9rem_1fr]">
+            <dt className="font-semibold">Postać</dt>
+            <dd>{dosageFormLabel(medication.dosageForm)}</dd>
+          </div>
+        )}
+        {medication.strength != null && (
+          <div className="grid gap-1 sm:grid-cols-[9rem_1fr]">
+            <dt className="font-semibold">Moc (informacja)</dt>
+            <dd>
+              {formatQuantity(medication.strength.value)} {medication.strength.unit}
+              <span className="mt-1 block text-ink-muted">
+                Moc jest tylko informacją z opakowania: nie wpływa na dawkę ani na zapas.
+              </span>
+            </dd>
+          </div>
+        )}
         <div className="grid gap-1 sm:grid-cols-[9rem_1fr]">
           <dt className="font-semibold">Dawkowanie</dt>
           <dd>
@@ -91,6 +122,13 @@ export function MedicationCard({
                 ))}
               </ul>
             )}
+            {isOutsideList(medication.dosageForm, medication.doseUnit, 'dose') && (
+              <span className="mt-1 block text-ink-muted">
+                <Badge tone="neutral">Jednostka spoza listy</Badge> Jednostka „
+                {medication.doseUnit.trim()}” została zapisana wcześniej i nie ma jej na liście dla
+                tej postaci. Zostaje bez zmian.
+              </span>
+            )}
             {since !== null && (
               <span className="mt-1 block text-ink-muted">
                 Obecny harmonogram obowiązuje od {formatLocalDay(since)}.
@@ -101,7 +139,14 @@ export function MedicationCard({
         <div className="grid gap-1 sm:grid-cols-[9rem_1fr]">
           <dt className="font-semibold">Zapas (szacunek)</dt>
           <dd>
-            <StockSummary estimate={stock} />
+            <StockSummary
+              estimate={stock}
+              threshold={medication.lowStockThreshold}
+              basis={medication.stock?.basis}
+            />
+            <span className="mt-1 block text-ink-muted">
+              <StockStatement medication={medication} timeZone={timeZone} />
+            </span>
           </dd>
         </div>
         {medication.notes !== null && (
@@ -113,6 +158,46 @@ export function MedicationCard({
       </dl>
 
       <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+        <ButtonLink
+          to={`/medications/${encodeURIComponent(medication.id)}`}
+          variant="secondary"
+          size="sm"
+        >
+          Szczegóły {ofTheMedication}
+        </ButtonLink>
+        {status !== 'ended' && medication.stock !== null && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onRefill(medication);
+            }}
+          >
+            Uzupełnij zapas {ofTheMedication}
+          </Button>
+        )}
+        {status !== 'ended' && medication.stock !== null && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onWaste(medication);
+            }}
+          >
+            Zapisz stratę {ofTheMedication}
+          </Button>
+        )}
+        {status !== 'ended' && medication.stock === null && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              onStartTracking(medication);
+            }}
+          >
+            Zacznij śledzić zapas {ofTheMedication}
+          </Button>
+        )}
         <ButtonLink
           to={`/medications/${encodeURIComponent(medication.id)}/edit`}
           variant="secondary"

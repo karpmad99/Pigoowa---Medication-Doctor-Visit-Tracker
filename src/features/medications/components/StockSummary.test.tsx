@@ -56,7 +56,7 @@ describe('StockSummary', () => {
   });
 
   it.each<[StockUnavailableReason, string]>([
-    ['no-stock', 'zapas nie został skonfigurowany.'],
+    ['no-stock', 'zapas nie został policzony.'],
     ['invalid-data', 'zapisane dane zapasu są nieprawidłowe.'],
     ['ended', 'lek został zakończony.'],
     ['no-schedule', 'lek nie ma harmonogramu.'],
@@ -80,5 +80,55 @@ describe('StockSummary', () => {
     const failed = text('failed');
     expect(failed).toContain('Szacunek niedostępny');
     expect(failed).not.toMatch(/\d/);
+  });
+});
+
+describe('StockSummary with an own threshold', () => {
+  it("flags the stock at the threshold, and says it is the person's own level", () => {
+    render(
+      <StockSummary estimate={available(10, 40)} threshold={{ quantity: 10, unit: 'tabletka' }} />,
+    );
+
+    expect(screen.getByText('Niski zapas')).toBeVisible();
+    expect(
+      screen.getByText(/Zapas jest na poziomie Twojego progu \(10 tabletek\) lub poniżej/),
+    ).toBeVisible();
+  });
+
+  it('does not flag a stock above the threshold, even when the days are few', () => {
+    render(
+      <StockSummary estimate={available(11, 2)} threshold={{ quantity: 10, unit: 'tabletka' }} />,
+    );
+
+    expect(screen.queryByText('Niski zapas')).not.toBeInTheDocument();
+  });
+
+  it('uses the 7-day rule, with no mention of a threshold, when the threshold is in another unit', () => {
+    render(<StockSummary estimate={available(5, 3)} threshold={{ quantity: 100, unit: 'ml' }} />);
+
+    expect(screen.getByText('Niski zapas')).toBeVisible();
+    expect(screen.queryByText(/Twojego progu/)).not.toBeInTheDocument();
+  });
+
+  it('does not show a threshold line for a flag that comes from the 7-day rule', () => {
+    render(<StockSummary estimate={available(5, 3)} threshold={null} />);
+
+    expect(screen.getByText('Niski zapas')).toBeVisible();
+    expect(screen.queryByText(/Twojego progu/)).not.toBeInTheDocument();
+  });
+
+  it('shows nothing about a threshold while loading, failed or unavailable', () => {
+    for (const estimate of [
+      'loading',
+      'failed',
+      { available: false, reason: 'no-stock' },
+    ] as const) {
+      const { unmount } = render(
+        <StockSummary estimate={estimate} threshold={{ quantity: 10, unit: 'tabletka' }} />,
+      );
+
+      expect(screen.queryByText('Niski zapas')).not.toBeInTheDocument();
+      unmount();
+    }
   });
 });

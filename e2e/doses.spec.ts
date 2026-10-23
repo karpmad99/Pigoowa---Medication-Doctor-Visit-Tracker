@@ -226,7 +226,7 @@ test.describe('the day view', () => {
     const demoxalStock = stock.getByRole('listitem').filter({ hasText: 'Demoxal' });
     await expect(demoxalStock).toContainText('Pozostało ok. 28 tabletek');
     await expect(stock.getByRole('listitem').filter({ hasText: 'Testovit' })).toContainText(
-      'Szacunek niedostępny: zapas nie został skonfigurowany.',
+      'Szacunek niedostępny: zapas nie został policzony.',
     );
 
     await skippedButton(page, 'Demoxal', '20:00').click();

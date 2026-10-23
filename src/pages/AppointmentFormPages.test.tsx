@@ -72,7 +72,9 @@ describe('add appointment: the form', () => {
       );
     }
     expect(date).toHaveAccessibleDescription('Wybierz poprawną datę wizyty.');
-    expect(time).toHaveAccessibleDescription('Wybierz poprawną godzinę wizyty.');
+    expect(time).toHaveAccessibleDescription(
+      expect.stringContaining('Wpisz godzinę wizyty w formacie GG:MM, na przykład 10:30.'),
+    );
     expect(doctor).toHaveFocus();
     expect(await all(services)).toEqual([]);
   });

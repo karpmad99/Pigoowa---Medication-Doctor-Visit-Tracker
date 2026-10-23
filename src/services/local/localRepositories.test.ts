@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { asLocalDate } from '@/utils/date';
+import { asLocalDate, asTimestamp } from '@/utils/date';
 import { createFakeStorage, createQuotaError } from '@/test/fakeStorage';
-import { makeAppointment, makeDoseLog, makeMedication, scheduleTime } from '@/test/fixtures';
+import {
+  makeAppointment,
+  makeDoseLog,
+  makeMedication,
+  makeStockEvent,
+  scheduleTime,
+} from '@/test/fixtures';
 import { describeRepositoryContract } from '../contract/repositoryContract';
 import { RepositoryError } from '../errors';
 import { STORAGE_KEYS } from './collections';
@@ -52,8 +58,9 @@ describe('local storage layout', () => {
 
     await repositories.medications.create(makeMedication({ id: 'm-1' }));
     expect([...storage.data.keys()]).toEqual([STORAGE_KEYS.medications]);
+    // Version 2 is what is written since the storage migration (PROJECT_SPEC §10.5).
     expect(JSON.parse(storage.data.get(STORAGE_KEYS.medications) ?? '')).toMatchObject({
-      version: 1,
+      version: 2,
     });
 
     await repositories.appointments.create(makeAppointment({ id: 'a-1' }));
@@ -101,6 +108,42 @@ describe('corrupted or foreign stored data', () => {
       'not a list',
     ],
     ['an item that is not an object', envelope(['x']), STORAGE_KEYS.medications, 'medications[0]'],
+    [
+      'an unknown dosage form',
+      envelope([{ ...valid, dosageForm: 'powder' }]),
+      STORAGE_KEYS.medications,
+      'medications[0].dosageForm',
+    ],
+    [
+      'a strength that is half given',
+      envelope([{ ...valid, strength: { value: 5 } }]),
+      STORAGE_KEYS.medications,
+      'medications[0].strength.unit',
+    ],
+    [
+      'a strength of zero',
+      envelope([{ ...valid, strength: { value: 0, unit: 'mg' } }]),
+      STORAGE_KEYS.medications,
+      'medications[0].strength.value',
+    ],
+    [
+      'a low-stock threshold with no stock to be about',
+      envelope([{ ...valid, stock: null, lowStockThreshold: { quantity: 1, unit: 'tabletka' } }]),
+      STORAGE_KEYS.medications,
+      'medications[0].lowStockThreshold',
+    ],
+    [
+      'a negative low-stock threshold',
+      envelope([
+        {
+          ...valid,
+          stock: { quantity: 5, unit: 'tabletka', asOf: '2026-10-01T08:00:00.000Z' },
+          lowStockThreshold: { quantity: -1, unit: 'tabletka' },
+        },
+      ]),
+      STORAGE_KEYS.medications,
+      'medications[0].lowStockThreshold.quantity',
+    ],
     [
       'a missing required field',
       envelope([{ ...valid, doseUnit: undefined }]),
@@ -204,7 +247,7 @@ describe('corrupted or foreign stored data', () => {
   );
 
   it('refuses data written by an unknown version and leaves it untouched', async () => {
-    const stored = envelope([], 2);
+    const stored = envelope([], 3);
     const storage = createFakeStorage({ [STORAGE_KEYS.medications]: stored });
     const repositories = createLocalRepositories(storage);
 
@@ -363,6 +406,112 @@ describe('storage failures', () => {
     storage.heal();
     expect(await repositories.medications.list()).toHaveLength(1);
     expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toHaveLength(1);
+  });
+
+  describe('deleting a medication that has stock events (three keys)', () => {
+    async function seeded() {
+      const storage = createFakeStorage();
+      const repositories = createLocalRepositories(storage);
+      await repositories.medications.create(
+        makeMedication({
+          id: 'm-1',
+          stock: { quantity: 10, unit: 'tabletka', asOf: asTimestamp('2026-10-01T08:00:00Z') },
+        }),
+      );
+      await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', medicationId: 'm-1' }));
+      await repositories.stockEvents.append(makeStockEvent({ id: 'e-1', medicationId: 'm-1' }));
+      return { storage, repositories };
+    }
+
+    it('removes the medication, its intake records and its events, writing each key once', async () => {
+      const { storage, repositories } = await seeded();
+      storage.writes.length = 0;
+
+      await repositories.medications.remove('m-1');
+
+      expect([...storage.writes].sort()).toEqual(
+        [STORAGE_KEYS.doseLogs, STORAGE_KEYS.medications, STORAGE_KEYS.stockEvents].sort(),
+      );
+      expect(await repositories.stockEvents.list()).toEqual([]);
+    });
+
+    it('rolls everything back when the events cannot be removed', async () => {
+      const { storage, repositories } = await seeded();
+      const before = new Map(storage.data);
+
+      storage.failWrites(createQuotaError(), (key) => key === STORAGE_KEYS.stockEvents);
+      const error = await failureOf(repositories.medications.remove('m-1'));
+
+      expect(error.code).toBe('storage-full');
+      expect(error.detail).toBe('rolled back');
+      expect(storage.data).toEqual(before);
+      storage.heal();
+      expect(await repositories.medications.list()).toHaveLength(1);
+      expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toHaveLength(1);
+      expect(await repositories.stockEvents.list()).toHaveLength(1);
+    });
+
+    it('rolls the medication back when the intake records cannot be removed, before any event is touched', async () => {
+      const { storage, repositories } = await seeded();
+      const before = new Map(storage.data);
+
+      storage.failWrites(createQuotaError(), (key) => key === STORAGE_KEYS.doseLogs);
+      const error = await failureOf(repositories.medications.remove('m-1'));
+
+      expect(error.detail).toBe('rolled back');
+      expect(storage.data).toEqual(before);
+    });
+
+    it('says so when the rollback of the events step fails too', async () => {
+      const { storage, repositories } = await seeded();
+
+      let medicationWrites = 0;
+      storage.failWrites(
+        createQuotaError(),
+        (key) => key === STORAGE_KEYS.stockEvents || ++medicationWrites > 1,
+      );
+      const error = await failureOf(repositories.medications.remove('m-1'));
+
+      expect(error.detail).toBe('rollback failed: data may be inconsistent');
+    });
+
+    it('does not touch the events key when the medication has none', async () => {
+      const storage = createFakeStorage();
+      const repositories = createLocalRepositories(storage);
+      await repositories.medications.create(makeMedication({ id: 'm-1' }));
+      await repositories.medications.create(makeMedication({ id: 'm-2', name: 'Inny' }));
+      await repositories.stockEvents.append(makeStockEvent({ id: 'e-2', medicationId: 'm-2' }));
+      storage.writes.length = 0;
+
+      await repositories.medications.remove('m-1');
+
+      expect(storage.writes).toEqual([STORAGE_KEYS.medications]);
+    });
+
+    it('is refused before anything is written when the events are still in the old format', async () => {
+      const { storage, repositories } = await seeded();
+      storage.data.set(
+        STORAGE_KEYS.stockEvents,
+        JSON.stringify({ version: 1, items: [makeStockEvent({ id: 'e-1', medicationId: 'm-1' })] }),
+      );
+      const before = new Map(storage.data);
+
+      const error = await failureOf(repositories.medications.remove('m-1'));
+
+      expect(error.code).toBe('migration-required');
+      expect(storage.data).toEqual(before);
+    });
+
+    it('reports damaged events as an error and deletes nothing', async () => {
+      const { storage, repositories } = await seeded();
+      storage.data.set(STORAGE_KEYS.stockEvents, '{not json');
+      const before = new Map(storage.data);
+
+      const error = await failureOf(repositories.medications.remove('m-1'));
+
+      expect(error.code).toBe('data-corrupted');
+      expect(storage.data).toEqual(before);
+    });
   });
 
   it('says so when even the rollback fails, instead of pretending all is well', async () => {

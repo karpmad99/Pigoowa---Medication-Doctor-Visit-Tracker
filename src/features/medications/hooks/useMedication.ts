@@ -7,5 +7,5 @@ import type { Id } from '@/types/primitives';
 export function useMedication(id: Id) {
   const { repositories } = useServices();
   const load = useCallback(() => repositories.medications.get(id), [repositories, id]);
-  return useAsyncData(load);
+  return useAsyncData(['medication', id], load);
 }

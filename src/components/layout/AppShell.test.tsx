@@ -121,6 +121,44 @@ describe('demo notice', () => {
   );
 });
 
+describe('migration notice', () => {
+  it('shows nothing in the normal case, and shows the notice of a failed start-up migration on every page', async () => {
+    renderAppAt('/');
+    expect(
+      screen.queryByRole('region', { name: 'Aktualizacja danych w przeglądarce' }),
+    ).not.toBeInTheDocument();
+
+    const failing = {
+      ...createTestServices(),
+      storageMigration: {
+        current: () => ({
+          collections: [
+            {
+              collection: 'medications' as const,
+              result: {
+                status: 'failed' as const,
+                reason: 'write-failed' as const,
+                storageFull: false,
+              },
+            },
+          ],
+        }),
+        run: () => ({ collections: [] }),
+      },
+    };
+    const router = createMemoryRouter(routes, { initialEntries: ['/appointments'] });
+    render(
+      <ServicesProvider services={failing}>
+        <RouterProvider router={router} />
+      </ServicesProvider>,
+    );
+
+    expect(
+      await screen.findByRole('region', { name: 'Aktualizacja danych w przeglądarce' }),
+    ).toHaveTextContent('Leki');
+  });
+});
+
 describe('page titles', () => {
   it('names the tab after the current page and returns to the plain app name on the home page', async () => {
     const user = userEvent.setup();

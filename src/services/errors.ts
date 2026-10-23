@@ -21,6 +21,16 @@ export type RepositoryErrorCode =
   | 'invalid-input'
   /** Demo data can only be loaded into empty storage. */
   | 'demo-data-not-empty'
+  /** Demo data is for the demonstration version only; an account's data is never filled or replaced with it. */
+  | 'demo-data-unavailable'
+  /** The stored data still has the old format and has not been migrated yet, so nothing may be written to it. */
+  | 'migration-required'
+  /** The server could not be reached (no network, a blocked request, a stopped server). Nothing was changed. */
+  | 'network-error'
+  /** There is no signed-in user, or the session is no longer valid. Nothing was changed. */
+  | 'not-signed-in'
+  /** The server refused the operation for this user (row level security). Nothing was changed. */
+  | 'permission-denied'
   /** Something unexpected went wrong (a bug, not a data problem). */
   | 'unexpected';
 
@@ -40,6 +50,14 @@ const messages: Record<RepositoryErrorCode, string> = {
   'missing-reference': 'Rekord odwołuje się do leku, który nie istnieje.',
   'invalid-input': 'Dane są nieprawidłowe i nie zostały zapisane.',
   'demo-data-not-empty': 'Dane demonstracyjne można wczytać tylko do pustej pamięci.',
+  'demo-data-unavailable':
+    'Dane demonstracyjne są dostępne tylko w trybie demo. Dane konta nigdy nie są nimi zastępowane.',
+  'migration-required':
+    'Zapisane dane nie zostały jeszcze zaktualizowane do nowego formatu, więc zmiany nie zostały zapisane. Odśwież stronę i spróbuj ponownie.',
+  'network-error':
+    'Nie można połączyć się z serwerem. Sprawdź połączenie z internetem i spróbuj ponownie. Zmiany nie zostały zapisane.',
+  'not-signed-in': 'Sesja wygasła lub nie jesteś zalogowany. Zaloguj się ponownie.',
+  'permission-denied': 'Serwer odmówił wykonania tej operacji. Zmiany nie zostały zapisane.',
   unexpected: 'Wystąpił nieoczekiwany błąd.',
 };
 

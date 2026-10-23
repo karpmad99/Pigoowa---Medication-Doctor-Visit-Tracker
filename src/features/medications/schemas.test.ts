@@ -5,12 +5,18 @@ import { medicationFormMessages, medicationFormSchema } from './schemas';
 function values(overrides: Partial<MedicationFormValues> = {}): MedicationFormValues {
   return {
     name: 'Lek A',
+    dosageForm: '',
     doseUnit: 'tabletka',
+    strengthValue: '',
+    strengthUnit: '',
     notes: '',
     startDate: '2026-10-01',
     endDate: '',
     scheduleTimes: [{ scheduleTimeId: '', timeOfDay: '08:00', doseAmount: '1' }],
     stockQuantity: '',
+    stockUnit: '',
+    lowStockThreshold: '',
+    lowStockThresholdUnit: '',
     ...overrides,
   };
 }

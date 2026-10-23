@@ -3,16 +3,22 @@ import type { Clock } from '@/utils/clock';
 import { RepositoryError, toRepositoryError } from '../errors';
 import type { DemoDataControls } from '../repositories';
 import { createDemoData } from '../demo/demoData';
-import { restoreRaw, writeCollection, writeRaw } from './collection';
+import { replaceCollection, restoreRaw, writeRaw } from './collection';
 import {
   appointmentCollection,
   doseLogCollection,
   medicationCollection,
   STORAGE_KEYS,
+  stockEventCollection,
 } from './collections';
 import type { KeyValueStorage } from './storage';
 
-const DATA_KEYS = [STORAGE_KEYS.medications, STORAGE_KEYS.doseLogs, STORAGE_KEYS.appointments];
+const DATA_KEYS = [
+  STORAGE_KEYS.medications,
+  STORAGE_KEYS.doseLogs,
+  STORAGE_KEYS.appointments,
+  STORAGE_KEYS.stockEvents,
+];
 
 interface BackupContents {
   version: 1;
@@ -47,13 +53,27 @@ export function createLocalDemoData({
 }: LocalDemoDataOptions): DemoDataControls {
   function writeDemoData(): void {
     const demo = createDemoData({ now: clock.now(), timeZone });
-    writeCollection(storage, medicationCollection, demo.medications);
-    writeCollection(storage, doseLogCollection, demo.doseLogs);
-    writeCollection(storage, appointmentCollection, demo.appointments);
+    // Replacing everything is the point of these controls, so the write gate does not apply (they
+    // keep a backup of their own and write the current format).
+    replaceCollection(storage, medicationCollection, demo.medications);
+    replaceCollection(storage, doseLogCollection, demo.doseLogs);
+    replaceCollection(storage, appointmentCollection, demo.appointments);
+    replaceCollection(storage, stockEventCollection, demo.stockEvents);
   }
 
   function restoreAll(previous: Record<string, string | null>): boolean {
-    return Object.entries(previous).every(([key, raw]) => restoreRaw(storage, key, raw));
+    // A write that was refused left its key as it was: putting that key back is not needed, and
+    // would be refused again for the same reason. Every key is attempted, whatever the others do.
+    return Object.entries(previous)
+      .map(([key, raw]) => {
+        try {
+          if (storage.getItem(key) === raw) return true;
+        } catch {
+          // Unreadable: try to restore it anyway.
+        }
+        return restoreRaw(storage, key, raw);
+      })
+      .every(Boolean);
   }
 
   return {

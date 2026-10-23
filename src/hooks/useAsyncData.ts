@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { RepositoryError, toRepositoryError } from '@/services/errors';
 
 /**
@@ -29,84 +30,68 @@ export interface AsyncDataOptions {
    * Keep showing the last successful data while `reload` fetches fresh data, instead of going
    * back to loading. For screens that refresh after a small write, where a spinner replacing the
    * whole list would be a flicker. A failed refresh still becomes an error (never stale data
-   * presented as current), and a different `load` (a different request) always starts at loading.
+   * presented as current), and a different request (a different key) always starts at loading.
    */
   keepDataOnReload?: boolean;
 }
 
-type Outcome<T> = { ok: true; data: T } | { ok: false; error: RepositoryError };
-
 /**
- * Runs `load` and reports its state.
+ * Loads server state with TanStack Query (PROJECT_SPEC DEC-12) and reports it as the union above.
+ * The shape is the one the components have always had; only what is behind it changed.
  *
- * - `load` must keep the same identity between renders (wrap it in `useCallback`); a new
- *   function means "a different request": the state returns to loading and the old request's
- *   answer is thrown away. An inline arrow function would therefore reload forever.
- * - Answers that arrive late are ignored: after the component unmounts, or after the request was
- *   replaced by a newer one, the old answer can no longer change the state.
+ * - `key` names the request. It must contain everything the request depends on (an id, a date
+ *   range). A different key is a different request: the state returns to loading and the old
+ *   request's answer can no longer reach this screen. The user's account is not part of the key:
+ *   every account gets its own query client (see ServicesProvider), so answers never cross accounts.
+ * - Nothing is refetched by itself (no refetch on focus, reconnect or mount, no retries, and nothing
+ *   is kept after the last screen using it is gone): data changes only when the screen reloads it,
+ *   as before. A failed answer is shown as a failure, never as an empty list.
  */
 export function useAsyncData<T>(
+  key: readonly unknown[],
   load: () => Promise<T>,
   { keepDataOnReload = false }: AsyncDataOptions = {},
 ): AsyncDataResult<T> {
-  const [version, setVersion] = useState(0);
-  // A new object whenever the request changes. It labels the answer so we can tell whether an
-  // answer belongs to the current request or an old one.
-  const request = useMemo(() => ({ load, version }), [load, version]);
-  const [settled, setSettled] = useState<{
-    request: { load: () => Promise<T> };
-    outcome: Outcome<T>;
-  } | null>(null);
-
-  useEffect(() => {
-    let ignore = false;
-    // Starting from a resolved promise also turns a `load` that throws at once into a rejection.
-    Promise.resolve()
-      .then(load)
-      .then(
-        (data) => {
-          if (!ignore) setSettled({ request, outcome: { ok: true, data } });
-        },
-        (error: unknown) => {
-          if (!ignore)
-            setSettled({ request, outcome: { ok: false, error: toRepositoryError(error) } });
-        },
-      );
-    return () => {
-      ignore = true;
-    };
-  }, [request, load]);
-
-  const reload = useCallback(() => {
-    setVersion((current) => current + 1);
-  }, []);
-
-  if (settled?.request !== request) {
-    // Same loader, newer version = a reload (not a different request).
-    if (keepDataOnReload && settled?.request.load === load && settled.outcome.ok) {
-      return {
-        isLoading: false,
-        data: settled.outcome.data,
-        error: undefined,
-        reload,
-        isRefreshing: true,
-      };
-    }
-    return { isLoading: true, data: undefined, error: undefined, reload, isRefreshing: false };
-  }
-  return settled.outcome.ok
-    ? {
-        isLoading: false,
-        data: settled.outcome.data,
-        error: undefined,
-        reload,
-        isRefreshing: false,
+  const queryClient = useQueryClient();
+  const query = useQuery<T, RepositoryError>({
+    queryKey: key,
+    queryFn: async () => {
+      try {
+        return await load();
+      } catch (error) {
+        throw toRepositoryError(error);
       }
-    : {
-        isLoading: false,
-        data: undefined,
-        error: settled.outcome.error,
-        reload,
-        isRefreshing: false,
-      };
+    },
+  });
+
+  const keyText = JSON.stringify(key);
+  const { refetch } = query;
+  const reload = useCallback(() => {
+    if (keepDataOnReload) {
+      void refetch();
+    } else {
+      // Back to the initial state (loading), then fetch again.
+      void queryClient.resetQueries({ queryKey: JSON.parse(keyText) as unknown[], exact: true });
+    }
+  }, [keepDataOnReload, refetch, queryClient, keyText]);
+
+  if (query.status === 'error') {
+    return {
+      isLoading: false,
+      data: undefined,
+      error: query.error,
+      reload,
+      isRefreshing: false,
+    };
+  }
+  if (query.status === 'success') {
+    return {
+      isLoading: false,
+      data: query.data,
+      error: undefined,
+      reload,
+      isRefreshing: keepDataOnReload && query.isFetching,
+    };
+  }
+  return { isLoading: true, data: undefined, error: undefined, reload, isRefreshing: false };
 }

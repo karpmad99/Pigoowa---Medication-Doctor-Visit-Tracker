@@ -6,5 +6,5 @@ import { useServices } from '@/hooks/useServices';
 export function useMedications() {
   const { repositories } = useServices();
   const load = useCallback(() => repositories.medications.list(), [repositories]);
-  return useAsyncData(load);
+  return useAsyncData(['medications'], load);
 }

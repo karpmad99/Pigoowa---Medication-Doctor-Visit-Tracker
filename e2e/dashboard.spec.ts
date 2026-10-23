@@ -98,6 +98,60 @@ test.describe('with data', () => {
     ).toBeVisible();
   });
 
+  test('points at the first dose without a record, in words, and the pointer moves as doses are recorded', async ({
+    page,
+  }) => {
+    await loadDemoData(page);
+    await openDashboard(page);
+    const doses = region(page, 'Dzisiejsze dawki');
+    const label = doses.getByText('Następna dawka bez zapisu');
+
+    // 07:30, 08:00, 13:00 and 20:00 are all unrecorded; the clock says 12:00 and it does not matter.
+    await expect(label).toHaveCount(1);
+    await expect(
+      doses.getByRole('listitem').filter({ hasText: 'Następna dawka bez zapisu' }),
+    ).toContainText('07:30');
+
+    await page.getByRole('button', { name: 'Oznacz jako pominiętą: Przykładyna, 07:30' }).click();
+    await expect(page.getByText('Zapisano jako pominiętą: Przykładyna, 07:30.')).toBeVisible();
+    await expect(label).toHaveCount(1);
+    await expect(
+      doses.getByRole('listitem').filter({ hasText: 'Następna dawka bez zapisu' }),
+    ).toContainText('08:00');
+
+    await page.getByRole('button', { name: 'Oznacz jako przyjętą: Demoxal, 08:00' }).click();
+    await expect(
+      doses.getByRole('listitem').filter({ hasText: 'Następna dawka bez zapisu' }),
+    ).toContainText('13:00');
+
+    // Neutral wording: it is not a status and never says late or missed.
+    expect(await doses.textContent()).not.toMatch(/spóźnion|zaległ|%/i);
+    await expect(doses.getByText('Nie zapisano')).toHaveCount(2);
+  });
+
+  test('says in words, above the list, that a stock is low, and frames that medication', async ({
+    page,
+  }) => {
+    await page.goto('/medications/new');
+    await page.getByRole('textbox', { name: /^Nazwa leku/ }).fill('Malowit');
+    await page.getByRole('textbox', { name: /^Jednostka dawki/ }).fill('tabletka');
+    await page.getByLabel(/^Godzina 1/).fill('09:00');
+    await page.getByRole('textbox', { name: /^Dawka 1/ }).fill('1');
+    await page.getByRole('textbox', { name: /^Aktualny zapas/ }).fill('3');
+    await page.getByRole('button', { name: 'Dodaj lek' }).click();
+    await expect(page.getByText('Dodano lek „Malowit”.')).toBeVisible();
+
+    await openDashboard(page);
+    const stock = region(page, 'Zapasy leków');
+
+    await expect(
+      stock.getByText('Niski zapas: 1 lek. Szacunek wystarczy na mniej niż 7 dni.'),
+    ).toBeVisible();
+    const row = stock.getByRole('listitem').filter({ hasText: 'Malowit' });
+    await expect(row.getByText('Niski zapas', { exact: true })).toBeVisible();
+    await expect(row).toContainText('wystarczy na ok. 3 dni');
+  });
+
   test('works with the keyboard, and keeps focus on the dose that changed', async ({ page }) => {
     await loadDemoData(page);
     await openDashboard(page);

@@ -12,7 +12,7 @@ interface CardProps {
 export function Card({ as: Tag = 'div', className, children, ...rest }: CardProps) {
   return (
     <Tag
-      className={cx('rounded-card border border-line bg-surface p-4 sm:p-6', className)}
+      className={cx('rounded-card border border-line-card bg-surface p-4 sm:p-6', className)}
       {...rest}
     >
       {children}

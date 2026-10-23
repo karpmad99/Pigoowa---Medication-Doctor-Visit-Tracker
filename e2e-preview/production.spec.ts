@@ -93,3 +93,54 @@ test('a medication added in the production build is still there after a reload',
   await expect(page.getByRole('article', { name: 'Lek przykładowy' })).toBeVisible();
   expect(problems).toEqual([]);
 });
+
+// ROADMAP Stage 11: the build with accounts differs from the demonstration only by two PUBLIC variables, and no
+// secret may ever be in what visitors download. The scripts are fetched exactly as a browser would get them.
+
+test('the demonstration build never loads the account code', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', (request) => requested.push(request.url()));
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Pulpit' })).toBeVisible();
+  await page.getByRole('link', { name: 'Leki', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Leki' })).toBeVisible();
+
+  expect(requested.filter((url) => url.includes('accountMain'))).toEqual([]);
+  expect(requested.filter((url) => !url.startsWith(ORIGIN) && !url.startsWith('data:'))).toEqual(
+    [],
+  );
+  // No sign-in page, no account bar: it is the demonstration.
+  await page.goto('/login');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Nie znaleziono strony' }),
+  ).toBeVisible();
+});
+
+test('no key, token or secret is in any script of the build, including the account chunk', async ({
+  request,
+}) => {
+  const html = await (await request.get('/')).text();
+  const entry = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+  expect(entry).toBeDefined();
+  const entryText = await (await request.get(entry ?? '')).text();
+  const chunkPaths = [...entryText.matchAll(/(?:assets\/|\.\/)([A-Za-z0-9_-]+\.js)/g)].map(
+    (match) => `/assets/${match[1] ?? ''}`,
+  );
+  const accountChunk = chunkPaths.find((path) => path.includes('accountMain'));
+  expect(accountChunk, 'the account chunk exists and is referenced from the entry').toBeDefined();
+
+  const scripts = [entry ?? '', ...new Set(chunkPaths)];
+  for (const path of scripts) {
+    const text = path === entry ? entryText : await (await request.get(path)).text();
+    // A real key is a JWT (three base64url parts) or a long token after one of the key prefixes. The words
+    // "service_role" and the prefix "sb_secret_" appear only in code that REFUSES such a key, so what is
+    // searched for is a value, not a word.
+    expect(text, path).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/);
+    expect(text, path).not.toMatch(/sb_(secret|publishable)_[A-Za-z0-9_-]{10,}/);
+    expect(text, path).not.toMatch(/service_role/);
+    expect(text, path).not.toMatch(/postgres(ql)?:\/\/\w+:\w+@/);
+    // No project address is baked in (the library itself names supabase.co hosts in its own code).
+    expect(text, path).not.toMatch(/:54321/);
+  }
+});

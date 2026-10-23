@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ModuleCard } from '@/components/ui/ModuleCard';
 
 interface DashboardPanelProps {
   title: string;
@@ -8,20 +9,13 @@ interface DashboardPanelProps {
 }
 
 /**
- * One panel of the dashboard: a labelled region with its own heading. The panels do not depend on
- * each other, so a panel that fails or is still loading never hides the others.
+ * One panel of the dashboard: a module card (a labelled region with its own heading). The panels do
+ * not depend on each other, so a panel that fails or is still loading never hides the others.
  */
 export function DashboardPanel({ title, description, children }: DashboardPanelProps) {
-  const headingId = useId();
   return (
-    <section aria-labelledby={headingId} className="space-y-4">
-      <div>
-        <h2 id={headingId} className="text-xl font-semibold">
-          {title}
-        </h2>
-        {description !== undefined && <p className="text-sm text-ink-muted">{description}</p>}
-      </div>
+    <ModuleCard title={title} description={description}>
       {children}
-    </section>
+    </ModuleCard>
   );
 }

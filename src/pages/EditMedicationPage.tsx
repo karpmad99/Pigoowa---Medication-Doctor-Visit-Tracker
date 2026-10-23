@@ -52,6 +52,7 @@ function EditForm({ medication }: { medication: Medication }) {
       submitLabel="Zapisz zmiany"
       isSaving={action.isRunning}
       saveError={action.error}
+      storedDoseUnit={medication.doseUnit}
       storedStockUnit={medication.stock?.unit ?? null}
       onSubmit={(values) => {
         void save(values);

@@ -4,6 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const MEDICATIONS_KEY = 'pigoowa:v1:medications';
 const LOGS_KEY = 'pigoowa:v1:dose-logs';
+const EVENTS_KEY = 'pigoowa:v1:stock-events';
 
 interface StoredMedication {
   id: string;
@@ -23,6 +24,8 @@ async function readItems<T>(page: Page, key: string): Promise<T[]> {
 
 const medications = (page: Page) => readItems<StoredMedication>(page, MEDICATIONS_KEY);
 const logs = (page: Page) => readItems<{ id: string; medicationId: string }>(page, LOGS_KEY);
+const stockEvents = (page: Page) =>
+  readItems<{ id: string; medicationId: string }>(page, EVENTS_KEY);
 
 /** Today as the browser sees it (the app uses the same time zone). */
 const today = (page: Page) => page.evaluate(() => new Date().toLocaleDateString('en-CA'));
@@ -90,7 +93,9 @@ test.describe('adding a medication', () => {
     await expect(name).toBeFocused();
     await expect(name).toHaveAttribute('aria-invalid', 'true');
     await expect(page.getByText('Wpisz nazwę leku.')).toBeVisible();
-    await expect(page.getByText('Wybierz poprawną godzinę.')).toBeVisible();
+    await expect(
+      page.getByText('Wpisz godzinę w formacie GG:MM, na przykład 07:30.'),
+    ).toBeVisible();
     await expect(page.getByRole('textbox', { name: /^Notatki/ })).toHaveValue('Moja notatka');
     expect(await medications(page)).toEqual([]);
 
@@ -157,9 +162,7 @@ test.describe('the list with demo data', () => {
     await expect(
       page
         .getByRole('article', { name: 'Testovit' })
-        .getByText(
-          'Szacunek niedostępny: zapas nie został skonfigurowany. Wpisz go, edytując lek.',
-        ),
+        .getByText('Szacunek niedostępny: zapas nie został policzony.'),
     ).toBeVisible();
     await expect(
       page.getByRole('article', { name: 'Dawnoxin' }).getByText('Zakończony'),
@@ -269,6 +272,8 @@ test.describe('deleting a medication permanently', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Trwale usunąć lek „Demoxal”?' });
     await expect(dialog).toContainText('cała historia przyjmowania: 7 zapisów');
+    // The demo data has three stock events for it, and the dialog says they go too.
+    await expect(dialog).toContainText('oraz historia zapasu: 3 zdarzenia');
     await expect(dialog).toContainText('Tej operacji nie można cofnąć');
     await expect(dialog.getByRole('button', { name: 'Zakończ lek zamiast usuwać' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Anuluj' })).toBeFocused();
@@ -329,7 +334,9 @@ test.describe('deleting a medication permanently', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Usuń trwale' }).click();
 
     await expect(
-      page.getByText('Usunięto lek „Demoxal” razem z historią przyjmowania (7 zapisów).'),
+      page.getByText(
+        'Usunięto lek „Demoxal” razem z historią przyjmowania (7 zapisów) oraz historią zapasu (3 zdarzenia).',
+      ),
     ).toBeVisible();
     await expect(page.getByRole('article', { name: 'Demoxal' })).toHaveCount(0);
     await page.reload();
@@ -338,6 +345,8 @@ test.describe('deleting a medication permanently', () => {
     const logsAfter = await logs(page);
     expect(logsBefore.length - logsAfter.length).toBe(7);
     expect(logsAfter.some((log) => log.medicationId === demoxalId)).toBe(false);
+    // Its stock events went with it, and nobody else's did.
+    expect((await stockEvents(page)).some((event) => event.medicationId === demoxalId)).toBe(false);
   });
 });
 

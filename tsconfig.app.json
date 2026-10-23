@@ -22,7 +22,8 @@
     "noUncheckedSideEffectImports": true,
     "erasableSyntaxOnly": true,
 
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"] },
+    "allowImportingTsExtensions": true
   },
   "include": ["src"]
 }

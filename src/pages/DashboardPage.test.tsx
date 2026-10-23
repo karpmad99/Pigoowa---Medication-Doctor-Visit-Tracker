@@ -133,7 +133,7 @@ describe('dashboard: today’s doses', () => {
     expect(
       rows.map((row) => [
         row.querySelector('time')?.textContent,
-        row.querySelector('p.font-medium')?.textContent,
+        row.querySelector('p.text-lg.font-semibold')?.textContent,
       ]),
     ).toEqual([
       ['07:30', 'Przykładyna'],
@@ -461,10 +461,12 @@ describe('dashboard: the stock summary', () => {
     await within(region).findByText(/Pozostało ok\. 10 tabletek/);
     // The first list is the stock list (the explanation below has a list of its own).
     const items = stockItems(region);
-    expect(items.map((item) => item.querySelector('p.font-medium')?.textContent)).toEqual([
-      'Demoxal', // 10 tablets, 2 a day: 5 days
-      'Przykładyna', // 120 ml, 5 ml a day: 24 days
-    ]);
+    expect(items.map((item) => item.querySelector('p.text-lg.font-semibold')?.textContent)).toEqual(
+      [
+        'Demoxal', // 10 tablets, 2 a day: 5 days
+        'Przykładyna', // 120 ml, 5 ml a day: 24 days
+      ],
+    );
     expect(items[0]).toHaveTextContent('Pozostało ok. 10 tabletek, wystarczy na ok. 5 dni.');
     expect(items[1]).toHaveTextContent('Pozostało ok. 120 ml, wystarczy na ok. 24 dni.');
   });
@@ -554,6 +556,270 @@ describe('dashboard: the stock summary', () => {
     );
 
     expect(router.state.location.pathname).toBe('/medications');
+  });
+});
+
+const NEXT_DOSE_LABEL = 'Następna dawka bez zapisu';
+
+/** The rows of today's doses (the ones with a time). */
+function doseRows(region: HTMLElement): HTMLElement[] {
+  return within(region)
+    .getAllByRole('listitem')
+    .filter((item) => item.querySelector('time'));
+}
+
+describe('dashboard: the next dose without a record', () => {
+  it('frames and labels the first dose without a record, and only that one', async () => {
+    const services = createTestServices();
+    await seedTypical(services);
+    renderApp(services);
+
+    const region = await panel('Dzisiejsze dawki');
+    await taken('Demoxal', '08:00');
+
+    const rows = doseRows(region);
+    expect(rows.map((row) => within(row).queryByText(NEXT_DOSE_LABEL) !== null)).toEqual([
+      true, // 07:30
+      false,
+      false,
+    ]);
+    expect(within(region).getAllByText(NEXT_DOSE_LABEL)).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('07:30');
+  });
+
+  it('moves to the next dose without a record after one is recorded, and is gone when all are', async () => {
+    const user = userEvent.setup();
+    const services = createTestServices();
+    await seedTypical(services);
+    renderApp(services);
+    const region = await panel('Dzisiejsze dawki');
+
+    await user.click(await taken('Przykładyna', '07:30'));
+    await waitFor(() => {
+      expect(doseRows(region)[1]).toHaveTextContent(NEXT_DOSE_LABEL);
+    });
+    expect(doseRows(region)[0]).not.toHaveTextContent(NEXT_DOSE_LABEL);
+
+    await user.click(await taken('Demoxal', '08:00'));
+    await waitFor(() => {
+      expect(doseRows(region)[2]).toHaveTextContent(NEXT_DOSE_LABEL);
+    });
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Oznacz jako pominiętą: Demoxal, 20:00' }),
+    );
+    await waitFor(() => {
+      expect(within(region).queryByText(NEXT_DOSE_LABEL)).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps pointing at an earlier dose without a record: it never says "late" and ignores the clock', async () => {
+    // The clock says 12:00; the 07:30 and 08:00 doses are long past and still unrecorded.
+    const services = createTestServices();
+    await seedTypical(services);
+    renderApp(services);
+
+    const region = await panel('Dzisiejsze dawki');
+    await taken('Demoxal', '08:00');
+
+    expect(doseRows(region)[0]).toHaveTextContent(NEXT_DOSE_LABEL);
+    expect(region.textContent).not.toMatch(
+      /spóźnion|zaległ|przeterminowan|pominięta automatycznie/i,
+    );
+    // A dose without a record is still just "Nie zapisano".
+    expect(doseRows(region)[0]).toHaveTextContent('Nie zapisano');
+  });
+
+  it('is not shown when no dose is planned for today', async () => {
+    const services = createTestServices();
+    await seedMedications(services, { id: 'm-1', name: 'Demoxal', scheduleTimes: [] });
+    renderApp(services);
+
+    await panel('Dzisiejsze dawki');
+    await screen.findByText('Na dziś nie zaplanowano żadnych dawek');
+
+    expect(screen.queryByText(NEXT_DOSE_LABEL)).not.toBeInTheDocument();
+  });
+
+  it('is not shown on the day view, which has its own rows and its own purpose', async () => {
+    const services = createTestServices();
+    await seedTypical(services);
+    renderApp(services, '/doses');
+
+    await taken('Demoxal', '08:00');
+
+    expect(screen.queryByText(NEXT_DOSE_LABEL)).not.toBeInTheDocument();
+  });
+});
+
+describe('dashboard: a clearer low-stock line', () => {
+  it('says in words, above the list, how many medications are low, with the limit', async () => {
+    const services = createTestServices();
+    await seedTypical(services);
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText(/Pozostało ok\. 10 tabletek/);
+
+    expect(
+      within(region).getByText('Niski zapas: 1 lek. Szacunek wystarczy na mniej niż 7 dni.'),
+    ).toBeVisible();
+  });
+
+  it('counts several with the right plural form, and frames only the low rows', async () => {
+    const services = createTestServices();
+    await seedMedications(
+      services,
+      {
+        id: 'a',
+        name: 'Pierwszy',
+        scheduleTimes: [scheduleTime('a1', '08:00', 1)],
+        stock: { quantity: 3, unit: 'tabletka', asOf: COUNTED },
+      },
+      {
+        id: 'b',
+        name: 'Drugi',
+        scheduleTimes: [scheduleTime('b1', '08:00', 1)],
+        stock: { quantity: 4, unit: 'tabletka', asOf: COUNTED },
+      },
+      {
+        id: 'c',
+        name: 'Trzeci',
+        scheduleTimes: [scheduleTime('c1', '08:00', 1)],
+        stock: { quantity: 90, unit: 'tabletka', asOf: COUNTED },
+      },
+    );
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText('Trzeci');
+
+    expect(
+      within(region).getByText('Niski zapas: 2 leki. Szacunek wystarczy na mniej niż 7 dni.'),
+    ).toBeVisible();
+    const [first, second, third] = stockItems(region);
+    expect(first).toHaveClass('border-warning-800');
+    expect(second).toHaveClass('border-warning-800');
+    expect(third).not.toHaveClass('border-warning-800');
+    // The word is in each low row too, so the colour is never the only signal.
+    expect(first && within(first).getByText('Niski zapas')).toBeVisible();
+    expect(third && within(third).queryByText('Niski zapas')).not.toBeInTheDocument();
+  });
+
+  it('shows no such line when nothing is low, or when no estimate can be computed', async () => {
+    const services = createTestServices();
+    await seedMedications(
+      services,
+      {
+        id: 'a',
+        name: 'Duży zapas',
+        scheduleTimes: [scheduleTime('a1', '08:00', 1)],
+        stock: { quantity: 90, unit: 'tabletka', asOf: COUNTED },
+      },
+      { id: 'b', name: 'Bez zapasu', stock: null },
+    );
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText('Duży zapas');
+
+    expect(within(region).queryByText(/^Niski zapas/)).not.toBeInTheDocument();
+  });
+});
+
+describe('dashboard: the own low-stock threshold', () => {
+  const stockOf = (quantity: number, unit = 'tabletka') => ({ quantity, unit, asOf: COUNTED });
+  const daily = [scheduleTime('a1', '08:00', 1)];
+
+  it('warns at the threshold even when the stock lasts for weeks, and says which rule', async () => {
+    const services = createTestServices();
+    await seedMedications(services, {
+      id: 'a',
+      name: 'Z progiem',
+      scheduleTimes: daily,
+      stock: stockOf(40),
+      lowStockThreshold: { quantity: 40, unit: 'tabletka' },
+    });
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText('Z progiem');
+
+    expect(
+      within(region).getByText(
+        /^Niski zapas: 1 lek\. Dla leków z własnym progiem ostrzegamy, gdy zapas jest na poziomie progu lub poniżej/,
+      ),
+    ).toBeVisible();
+    const [item] = stockItems(region);
+    expect(item).toHaveClass('border-warning-800');
+    expect(
+      item && within(item).getByText(/Zapas jest na poziomie Twojego progu \(40 tabletek\)/),
+    ).toBeVisible();
+  });
+
+  it('does not warn above the threshold, even when the stock would run out within a week', async () => {
+    const services = createTestServices();
+    await seedMedications(services, {
+      id: 'a',
+      name: 'Własna reguła',
+      scheduleTimes: daily,
+      stock: stockOf(5),
+      lowStockThreshold: { quantity: 4, unit: 'tabletka' },
+    });
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText('Własna reguła');
+
+    expect(within(region).queryByText(/^Niski zapas/)).not.toBeInTheDocument();
+  });
+
+  it('falls back to the 7-day rule, and keeps the old sentence, for a threshold in another unit', async () => {
+    const services = createTestServices();
+    await seedMedications(services, {
+      id: 'a',
+      name: 'Inna jednostka',
+      scheduleTimes: daily,
+      stock: stockOf(3),
+      lowStockThreshold: { quantity: 1, unit: 'ml' },
+    });
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText('Inna jednostka');
+
+    expect(
+      within(region).getByText('Niski zapas: 1 lek. Szacunek wystarczy na mniej niż 7 dni.'),
+    ).toBeVisible();
+  });
+
+  it('never lists or flags a medication whose estimate is unavailable, whatever its threshold', async () => {
+    const services = createTestServices();
+    await seedMedications(
+      services,
+      {
+        id: 'a',
+        name: 'Z zapasem',
+        scheduleTimes: daily,
+        stock: stockOf(500),
+      },
+      { id: 'b', name: 'Bez zapasu', stock: null },
+      {
+        id: 'c',
+        name: 'Inne jednostki dawki',
+        doseUnit: 'tabletka',
+        scheduleTimes: daily,
+        stock: stockOf(1, 'ml'),
+        lowStockThreshold: { quantity: 10, unit: 'ml' },
+      },
+    );
+    renderApp(services);
+
+    const region = await panel('Zapasy leków');
+    await within(region).findByText('Z zapasem');
+
+    expect(within(region).queryByText('Inne jednostki dawki')).not.toBeInTheDocument();
+    expect(within(region).queryByText(/^Niski zapas/)).not.toBeInTheDocument();
   });
 });
 

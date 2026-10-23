@@ -16,6 +16,8 @@
   --color-surface: #ffffff;
   --color-line: #d3dce1;
   --color-line-strong: #6b7d89;
+  /* The border of cards and rows: darker than --color-line so modules are told apart at a glance. */
+  --color-line-card: #788b97;
   --color-ink: #12212b;
   --color-ink-muted: #4a5a66;
 

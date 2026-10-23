@@ -44,8 +44,9 @@ test.describe('data layer in a real browser', () => {
     await expect(
       page.getByRole('region', { name: 'Wizyty' }).getByRole('heading', { name: 'Wizyty (5)' }),
     ).toBeVisible();
+    // Version 2 is what is written since the storage migration (PROJECT_SPEC §10.5).
     expect(JSON.parse((await stored(page, MEDICATIONS_KEY)) ?? 'null')).toMatchObject({
-      version: 1,
+      version: 2,
     });
   });
 

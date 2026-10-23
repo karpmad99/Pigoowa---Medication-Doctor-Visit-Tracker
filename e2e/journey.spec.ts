@@ -75,7 +75,7 @@ test('the main journey: from an empty start to a medication, a recorded dose and
   ).toBeVisible();
   const stock = region(page, 'Zapasy leków');
   await expect(stock.getByText('Pozostało ok. 10 tabletek, wystarczy na ok. 5 dni.')).toBeVisible();
-  await expect(stock.getByText('Niski zapas')).toBeVisible();
+  await expect(stock.getByText('Niski zapas', { exact: true })).toBeVisible();
 
   // 5. Record the morning dose as taken: the counts and the stock follow, and it survives a reload.
   await page.getByRole('button', { name: 'Oznacz jako przyjętą: Lek przykładowy, 08:00' }).click();

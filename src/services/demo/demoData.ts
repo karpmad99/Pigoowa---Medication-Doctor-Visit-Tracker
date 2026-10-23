@@ -1,6 +1,7 @@
 import type { Appointment } from '@/features/appointments/types';
 import type { DoseLog } from '@/features/doses/types';
 import type { Medication } from '@/features/medications/types';
+import type { StockEvent } from '@/features/stock/types';
 import type { Id, LocalDate, LocalTime, Timestamp } from '@/types/primitives';
 import { addDays, asLocalTime } from '@/utils/date';
 import { getLocalDateInZone, localDateTimeToTimestamp } from '@/utils/timeZone';
@@ -23,6 +24,7 @@ export interface DemoData {
   medications: Medication[];
   doseLogs: DoseLog[];
   appointments: Appointment[];
+  stockEvents: StockEvent[];
 }
 
 export interface DemoDataInput {
@@ -47,6 +49,8 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
     {
       id: 'demo-medication-demoxal',
       name: 'Demoxal',
+      dosageForm: 'tablet',
+      strength: { value: 500, unit: 'mg' },
       doseUnit: 'tabletka',
       notes: 'Przykładowy lek. Dane fikcyjne.',
       startDate: day(-60),
@@ -64,6 +68,8 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
     {
       id: 'demo-medication-przykladyna',
       name: 'Przykładyna',
+      dosageForm: 'liquid',
+      strength: { value: 50, unit: 'mg/ml' },
       doseUnit: 'ml',
       notes: 'Syrop. Dane fikcyjne.',
       startDate: day(-30),
@@ -73,6 +79,8 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
         { id: 'demo-schedule-przykladyna-morning', timeOfDay: time('07:30'), doseAmount: 5 },
       ],
       stock: { quantity: 120, unit: 'ml', asOf: now },
+      // An own threshold, in the stock unit: it is not reached with 120 ml.
+      lowStockThreshold: { quantity: 20, unit: 'ml' },
       createdAt: at(day(-30), '09:00'),
       updatedAt: at(day(-30), '09:00'),
     },
@@ -117,6 +125,7 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
     status: DoseLog['status'],
     doseAmount: number,
     doseUnit: string,
+    details?: Pick<DoseLog, 'takenAmount' | 'note'>,
   ): DoseLog => {
     const date = day(offset);
     return {
@@ -128,6 +137,7 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
       doseAmount,
       doseUnit,
       recordedAt: at(date, localTime),
+      ...details,
     };
   };
 
@@ -135,7 +145,11 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
     // Demoxal: three recent days, one skipped dose.
     log('demo-medication-demoxal', -3, '08:00', 'taken', 1, 'tabletka'),
     log('demo-medication-demoxal', -3, '20:00', 'taken', 1, 'tabletka'),
-    log('demo-medication-demoxal', -2, '08:00', 'taken', 1, 'tabletka'),
+    // Two tablets instead of the planned one, with a note that says why (an invented example).
+    log('demo-medication-demoxal', -2, '08:00', 'taken', 1, 'tabletka', {
+      takenAmount: 2,
+      note: 'Dwie tabletki zgodnie z wcześniejszym zaleceniem lekarza. Dane fikcyjne.',
+    }),
     log('demo-medication-demoxal', -2, '20:00', 'skipped', 1, 'tabletka'),
     log('demo-medication-demoxal', -1, '08:00', 'taken', 1, 'tabletka'),
     log('demo-medication-demoxal', -1, '20:00', 'taken', 1, 'tabletka'),
@@ -208,5 +222,41 @@ export function createDemoData({ now, timeZone }: DemoDataInput): DemoData {
     },
   ];
 
-  return { medications, doseLogs, appointments };
+  // All of them are older than the stock count (`asOf` is now), so none is counted: the history
+  // shows them as before the last count (one is a waste event), and one was reversed. The
+  // estimates are not affected.
+  const stockEvents: StockEvent[] = [
+    {
+      id: 'demo-stock-event-demoxal-refill',
+      medicationId: 'demo-medication-demoxal',
+      kind: 'refill',
+      amount: 30,
+      unit: 'tabletka',
+      recordedAt: at(day(-20), '10:00'),
+      note: 'Nowe opakowanie z apteki. Dane fikcyjne.',
+      reversedAt: null,
+    },
+    {
+      id: 'demo-stock-event-demoxal-refill-reversed',
+      medicationId: 'demo-medication-demoxal',
+      kind: 'refill',
+      amount: 10,
+      unit: 'tabletka',
+      recordedAt: at(day(-8), '10:00'),
+      note: 'Wpisane przez pomyłkę. Dane fikcyjne.',
+      reversedAt: at(day(-8), '10:05'),
+    },
+    {
+      id: 'demo-stock-event-demoxal-waste',
+      medicationId: 'demo-medication-demoxal',
+      kind: 'waste',
+      amount: 2,
+      unit: 'tabletka',
+      recordedAt: at(day(-15), '19:00'),
+      note: 'Tabletki wypadły do zlewu. Dane fikcyjne.',
+      reversedAt: null,
+    },
+  ];
+
+  return { medications, doseLogs, appointments, stockEvents };
 }

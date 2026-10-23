@@ -1,6 +1,9 @@
 import { NavLink, Outlet } from 'react-router';
 import { Icon, type IconName } from '@/components/ui/Icon';
+import { useAppMode } from '@/app/appMode';
+import { AccountBar } from './AccountBar';
 import { DemoBanner } from './DemoBanner';
+import { MigrationNotice } from './MigrationNotice';
 import { SafetyNote } from './SafetyNote';
 
 const navigationItems: readonly {
@@ -29,6 +32,7 @@ const navLinkClasses =
   'md:aria-[current=page]:shadow-[inset_3px_0_0_0_var(--color-brand-600)]';
 
 export function AppShell() {
+  const mode = useAppMode();
   return (
     <div className="flex min-h-dvh flex-col md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
       <a
@@ -67,7 +71,14 @@ export function AppShell() {
 
       {/* flex-1 makes this column fill the space under the top bar, so short pages do not scroll. */}
       <div className="flex flex-1 flex-col">
-        <DemoBanner />
+        {mode.kind === 'demo' ? (
+          <>
+            <DemoBanner />
+            <MigrationNotice />
+          </>
+        ) : (
+          <AccountBar />
+        )}
         {/* tabIndex -1 lets the skip link move keyboard focus here without adding a tab stop. */}
         <main
           id="main-content"

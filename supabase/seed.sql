@@ -1,0 +1,7 @@
+-- Intentionally empty.
+--
+-- The fictional demo data of Pigoowa is produced by src/services/demo/demoData.ts and lives in the browser
+-- (demo mode, which stays available after the database is connected). Every row of this database belongs to
+-- an account (a foreign key to auth.users), and an account created by a script could not be signed in to
+-- without real credentials, so nothing is seeded here. Test data for the database tests is created inside
+-- the tests themselves, in a transaction that is rolled back (supabase/tests/database).

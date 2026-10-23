@@ -48,6 +48,10 @@ const textPairs: [string, string][] = [
   ['brand-700', 'canvas'],
   ['brand-700', 'brand-50'],
   ['brand-700', 'brand-100'],
+  ['ink', 'brand-50'], // the highlighted dose
+  ['ink-muted', 'brand-50'], // the highlighted dose
+  ['ink-muted', 'warning-50'], // a low-stock row
+  ['warning-800', 'surface'],
   ['surface', 'brand-600'], // primary button
   ['surface', 'brand-700'], // primary button on hover
   ['surface', 'danger-600'], // danger button
@@ -64,6 +68,10 @@ const textPairs: [string, string][] = [
 const interfacePairs: [string, string][] = [
   ['line-strong', 'surface'],
   ['line-strong', 'canvas'],
+  ['line-card', 'surface'], // the border of cards and rows
+  ['line-card', 'canvas'],
+  ['brand-700', 'brand-50'], // the border of the highlighted dose
+  ['warning-800', 'warning-50'], // the border of a low-stock row
   ['brand-700', 'surface'], // focus ring
   ['brand-700', 'canvas'], // focus ring
   ['brand-600', 'surface'], // active navigation accent

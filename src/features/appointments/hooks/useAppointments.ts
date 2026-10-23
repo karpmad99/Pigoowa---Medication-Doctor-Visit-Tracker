@@ -6,5 +6,5 @@ import { useServices } from '@/hooks/useServices';
 export function useAppointments(options?: AsyncDataOptions) {
   const { repositories } = useServices();
   const load = useCallback(() => repositories.appointments.list(), [repositories]);
-  return useAsyncData(load, options);
+  return useAsyncData(['appointments'], load, options);
 }

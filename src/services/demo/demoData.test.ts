@@ -39,6 +39,48 @@ describe('createDemoData', () => {
       expect(validateAppointment(appointment).ok).toBe(true);
   });
 
+  it('shows the new optional fields on some medications and leaves others as older data is: without them', () => {
+    const byName = (name: string) =>
+      demo.medications.find((medication) => medication.name === name);
+
+    expect(byName('Demoxal')).toMatchObject({
+      dosageForm: 'tablet',
+      strength: { value: 500, unit: 'mg' },
+    });
+    expect(byName('Przykładyna')).toMatchObject({ dosageForm: 'liquid' });
+    for (const name of ['Testovit', 'Dawnoxin']) {
+      const medication = byName(name);
+      expect(medication && 'dosageForm' in medication).toBe(false);
+      expect(medication && 'strength' in medication).toBe(false);
+    }
+  });
+
+  it('gives one medication an own low-stock threshold, in its stock unit, and the others none', () => {
+    const withThreshold = demo.medications.filter((medication) => medication.lowStockThreshold);
+
+    expect(withThreshold.map((medication) => medication.name)).toEqual(['Przykładyna']);
+    for (const medication of withThreshold) {
+      expect(medication.stock).not.toBeNull();
+      expect(medication.lowStockThreshold?.unit).toBe(medication.stock?.unit);
+    }
+  });
+
+  it('keeps the strength out of every unit: the dose and stock units are still plain units', () => {
+    for (const medication of demo.medications) {
+      expect(medication.doseUnit).not.toBe(medication.strength?.unit);
+      expect(medication.stock === null || medication.stock.unit === medication.doseUnit).toBe(true);
+    }
+  });
+
+  it('has one taken dose with an amount other than planned and a note, the plan kept beside it', () => {
+    const different = demo.doseLogs.filter((log) => log.takenAmount !== undefined);
+
+    expect(different).toHaveLength(1);
+    expect(different[0]).toMatchObject({ status: 'taken', doseAmount: 1, takenAmount: 2 });
+    expect(different[0]?.note).toContain('Dane fikcyjne');
+    expect(demo.doseLogs.filter((log) => log.note !== undefined)).toHaveLength(1);
+  });
+
   it('has unique ids and every intake record refers to a demo medication', () => {
     for (const collection of [demo.medications, demo.doseLogs, demo.appointments]) {
       const ids = collection.map((item) => item.id);

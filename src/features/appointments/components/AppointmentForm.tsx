@@ -1,13 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { ButtonLink } from '@/components/ui/ButtonLink';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { FormField } from '@/components/ui/FormField';
 import { Icon } from '@/components/ui/Icon';
 import { Input } from '@/components/ui/Input';
+import { APPOINTMENT_QUICK_TIMES } from '@/components/ui/quickTimes';
 import { Textarea } from '@/components/ui/Textarea';
+import { TimeField } from '@/components/ui/TimeField';
 import type { RepositoryError } from '@/services/errors';
 import { isAmbiguousLocalTime, type AppointmentFormValues } from '../logic/appointmentForm';
 import { createAppointmentFormSchema } from '../schemas';
@@ -96,8 +98,31 @@ export function AppointmentForm({
         <FormField label="Data wizyty" error={errors.date?.message} required>
           {(field) => <Input {...field} type="date" {...register('date')} />}
         </FormField>
-        <FormField label="Godzina wizyty" error={errors.time?.message} required>
-          {(field) => <Input {...field} type="time" {...register('time')} />}
+        <FormField
+          label="Godzina wizyty"
+          hint="Wpisz na przykład 1030 albo 10:30, wybierz jedną z podpowiedzianych albo z zegara."
+          error={errors.time?.message}
+          required
+        >
+          {(field) => (
+            <Controller
+              control={control}
+              name="time"
+              render={({ field: timeField }) => (
+                <TimeField
+                  {...field}
+                  name={timeField.name}
+                  value={timeField.value}
+                  onChange={timeField.onChange}
+                  onBlur={timeField.onBlur}
+                  inputRef={timeField.ref}
+                  pickerLabel="Wybierz z zegara godzinę wizyty"
+                  quickPicksLabel="Popularne godziny wizyty"
+                  quickTimes={APPOINTMENT_QUICK_TIMES}
+                />
+              )}
+            />
+          )}
         </FormField>
       </div>
       {ambiguous && (

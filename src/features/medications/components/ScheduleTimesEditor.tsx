@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import {
+  Controller,
   useFieldArray,
   useWatch,
   type Control,
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { FormField } from '@/components/ui/FormField';
 import { Icon } from '@/components/ui/Icon';
 import { Input } from '@/components/ui/Input';
+import { TimeField } from '@/components/ui/TimeField';
 import type { MedicationFormValues, ScheduleTimeFormValues } from '../logic/medicationForm';
 
 type RowFieldName<K extends keyof ScheduleTimeFormValues> = `scheduleTimes.${number}.${K}`;
@@ -33,9 +35,10 @@ interface ScheduleTimesEditorProps {
 /**
  * The list of daily administration times, each with its own dose. It is a real group
  * (`fieldset` + `legend`) so that screen readers announce it, and every control is labelled
- * with its row number ("Godzina 2", "Dawka 2", "Usuń godzinę 2"). Time inputs are the browser's
- * own, so no time-picker library is needed. The rules (valid time, positive dose, no repeated
- * time) are not here: they live in `validateMedicationForm`, which reuses Stage 2's rules.
+ * with its row number ("Godzina 2", "Dawka 2", "Usuń godzinę 2"). The time is a `TimeField`: it
+ * can be typed (`0730`, `7:30`), picked from quick buttons or from the system clock, and the form
+ * always receives `HH:mm`. The rules (valid time, positive dose, no repeated time) are not here:
+ * they live in `validateMedicationForm`, which reuses Stage 2's rules.
  */
 export function ScheduleTimesEditor({ control, register, errors }: ScheduleTimesEditorProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'scheduleTimes' });
@@ -50,6 +53,7 @@ export function ScheduleTimesEditor({ control, register, errors }: ScheduleTimes
         {doseUnit === ''
           ? 'Dla każdej godziny wpisz dawkę. Najpierw podaj jednostkę dawki.'
           : `Dla każdej godziny wpisz dawkę w jednostce: ${doseUnit}.`}{' '}
+        Godzinę wpisz (na przykład 0730 albo 7:30), wybierz jedną z podpowiedzianych albo z zegara.
         Harmonogram ustawiasz samodzielnie. Nie zastępuje zaleceń lekarza.
       </p>
 
@@ -60,14 +64,35 @@ export function ScheduleTimesEditor({ control, register, errors }: ScheduleTimes
           return (
             <li
               key={field.id}
-              className="grid grid-cols-[1fr_1fr] items-start gap-3 rounded-card border border-line p-3 sm:grid-cols-[1fr_1fr_auto]"
+              className="grid grid-cols-2 items-start gap-3 rounded-card border border-line p-3"
             >
               <input type="hidden" {...register(rowField(index, 'scheduleTimeId'))} />
-              <FormField label={`Godzina ${number}`} error={rowErrors?.timeOfDay?.message} required>
-                {(control) => (
-                  <Input {...control} type="time" {...register(rowField(index, 'timeOfDay'))} />
-                )}
-              </FormField>
+              <div className="col-span-2">
+                <FormField
+                  label={`Godzina ${number}`}
+                  error={rowErrors?.timeOfDay?.message}
+                  required
+                >
+                  {(fieldProps) => (
+                    <Controller
+                      control={control}
+                      name={rowField(index, 'timeOfDay')}
+                      render={({ field: timeField }) => (
+                        <TimeField
+                          {...fieldProps}
+                          name={timeField.name}
+                          value={timeField.value}
+                          onChange={timeField.onChange}
+                          onBlur={timeField.onBlur}
+                          inputRef={timeField.ref}
+                          pickerLabel={`Wybierz z zegara godzinę ${number}`}
+                          quickPicksLabel={`Popularne godziny dla pozycji ${number}`}
+                        />
+                      )}
+                    />
+                  )}
+                </FormField>
+              </div>
               <FormField label={`Dawka ${number}`} error={rowErrors?.doseAmount?.message} required>
                 {(control) => (
                   <Input
@@ -79,7 +104,7 @@ export function ScheduleTimesEditor({ control, register, errors }: ScheduleTimes
                   />
                 )}
               </FormField>
-              <div className="col-span-2 sm:col-span-1 sm:pt-7">
+              <div className="col-span-2 sm:col-span-1 sm:self-end">
                 <Button
                   variant="secondary"
                   size="sm"

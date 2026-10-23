@@ -1,6 +1,7 @@
 import type { Appointment } from '@/features/appointments/types';
 import type { DoseLog } from '@/features/doses/types';
 import type { Medication, ScheduleTime } from '@/features/medications/types';
+import type { StockEvent } from '@/features/stock/types';
 import { asLocalDate, asLocalTime, asTimestamp } from '@/utils/date';
 
 // Small builders so each test states only what matters to it. Every default is explicit and
@@ -63,4 +64,18 @@ export function assertOk<T extends { ok: boolean }>(
   if (!result.ok) {
     throw new Error(`Expected a successful result, got: ${JSON.stringify(result)}`);
   }
+}
+
+export function makeStockEvent(overrides: Partial<StockEvent> = {}): StockEvent {
+  return {
+    id: 'ev-1',
+    medicationId: 'med-1',
+    kind: 'refill',
+    amount: 30,
+    unit: 'tabletka',
+    recordedAt: asTimestamp('2026-10-10T08:00:00Z'),
+    note: null,
+    reversedAt: null,
+    ...overrides,
+  };
 }

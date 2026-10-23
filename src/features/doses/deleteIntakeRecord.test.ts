@@ -172,7 +172,7 @@ describe('deleteOutsideScheduleRecord', () => {
     services.storage.data.set(
       STORAGE_KEYS.doseLogs,
       JSON.stringify({
-        version: 1,
+        version: 2,
         items: [
           orphan,
           makeDoseLog({ id: 'keep', medicationId: 'med-1', scheduledDate: d('2026-10-12') }),

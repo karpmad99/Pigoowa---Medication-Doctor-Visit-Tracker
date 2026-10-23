@@ -69,6 +69,12 @@ const screens: { name: string; path: string; ready: (page: Page) => Promise<void
     ready: (page) => expect(page.getByRole('article', { name: 'Demoxal' })).toBeVisible(),
   },
   {
+    name: 'medication details',
+    path: '/medications/demo-medication-przykladyna',
+    ready: (page) =>
+      expect(page.getByRole('heading', { level: 1, name: 'Przykładyna' })).toBeVisible(),
+  },
+  {
     name: 'add medication',
     path: '/medications/new',
     ready: (page) =>
@@ -106,6 +112,7 @@ const screens: { name: string; path: string; ready: (page: Page) => Promise<void
 ];
 
 for (const [widthName, viewport] of [
+  ['small phone (360 px)', { width: 360, height: 740 }],
   ['phone (390 px)', { width: 390, height: 844 }],
   ['desktop (1280 px)', { width: 1280, height: 800 }],
 ] as const) {
@@ -143,6 +150,19 @@ for (const [widthName, viewport] of [
       await expectNoViolations(page, 'appointment form with errors');
     });
 
+    test('medication form with the lists, the strength and the unit warning', async ({ page }) => {
+      await page.goto('/medications/new');
+      await page.getByRole('combobox', { name: 'Postać leku' }).selectOption('drops');
+      await page.getByRole('combobox', { name: /^Jednostka dawki/ }).selectOption('kropla');
+      await page.getByRole('textbox', { name: 'Moc: liczba' }).fill('5');
+      await page.getByRole('textbox', { name: /^Aktualny zapas/ }).fill('20');
+      await page.getByRole('combobox', { name: /^Jednostka zapasu/ }).selectOption('ml');
+      await expect(page.getByRole('status')).toBeVisible();
+      await page.getByRole('button', { name: 'Dodaj lek', exact: true }).click();
+      await expect(page.getByText('Wybierz jednostkę mocy, na przykład mg.')).toBeVisible();
+      await expectNoViolations(page, 'medication form with lists, strength and warning');
+    });
+
     test('open dialogs', async ({ page }) => {
       await loadDemoData(page);
 
@@ -160,6 +180,74 @@ for (const [widthName, viewport] of [
       await page.getByRole('button', { name: /^Usuń zapis…: Demoxal/ }).click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await expectNoViolations(page, 'delete record dialog');
+    });
+
+    test('the stock dialogs, the history and the stock states', async ({ page }) => {
+      await loadDemoData(page);
+
+      await page.goto('/medications');
+      await page.getByRole('button', { name: 'Uzupełnij zapas leku Demoxal' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await page.getByRole('button', { name: 'Uzupełnij zapas', exact: true }).click();
+      await expect(page.getByText(/Wpisz ilość większą od zera/)).toBeVisible();
+      await expectNoViolations(page, 'refill dialog with an error');
+      await page.keyboard.press('Escape');
+
+      await page.getByRole('button', { name: 'Zacznij śledzić zapas leku Testovit' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await page.getByRole('button', { name: 'Zacznij śledzić zapas', exact: true }).click();
+      await expect(page.getByText(/Wybierz, jak zaczynasz/)).toBeVisible();
+      await expectNoViolations(page, 'start tracking dialog with errors');
+      await page.keyboard.press('Escape');
+
+      await page.goto('/medications');
+      await page.getByRole('button', { name: 'Zapisz stratę leku Demoxal' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await page.getByRole('textbox', { name: /^Ile się zmarnowało/ }).fill('999');
+      await expect(
+        page.getByRole('status').filter({ hasText: /większa niż szacowany zapas/ }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Zapisz stratę', exact: true }).click();
+      await expect(page.getByText(/Zapisano stratę leku/)).toBeVisible();
+      await expectNoViolations(page, 'the page after a waste event');
+      await page.getByRole('button', { name: 'Zapisz stratę leku Demoxal' }).click();
+      await page.getByRole('button', { name: 'Zapisz stratę', exact: true }).click();
+      await expect(page.getByText(/Wpisz ilość większą od zera/)).toBeVisible();
+      await expectNoViolations(page, 'waste dialog with an error');
+      await page.keyboard.press('Escape');
+
+      await page.goto('/medications/demo-medication-demoxal');
+      await expect(page.getByRole('region', { name: 'Historia zdarzeń zapasu' })).toBeVisible();
+      await page
+        .getByRole('button', { name: /^Cofnij: Uzupełnienie/ })
+        .first()
+        .click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expectNoViolations(page, 'reverse dialog');
+    });
+
+    test('the dialog for the amount actually taken, and a dose taken differently', async ({
+      page,
+    }) => {
+      await loadDemoData(page);
+
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Przyjęto inną ilość: Demoxal, 08:00' }).click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expectNoViolations(page, 'the dialog for the amount taken');
+      await page.getByRole('textbox', { name: /^Ile przyjęto/ }).fill('0');
+      await page.getByRole('button', { name: 'Zapisz jako przyjętą', exact: true }).click();
+      await expect(page.getByText(/Wpisz ilość większą od zera/)).toBeVisible();
+      await expectNoViolations(page, 'the dialog for the amount taken, with an error');
+      await page.getByRole('textbox', { name: /^Ile przyjęto/ }).fill('3');
+      await page.getByRole('textbox', { name: /^Notatka/ }).fill('Notatka');
+      await page.getByRole('button', { name: 'Zapisz jako przyjętą', exact: true }).click();
+      await expect(page.getByText('Przyjęto: 3 tabletki.')).toBeVisible();
+      await expectNoViolations(page, 'the dashboard with a dose taken differently');
+
+      await page.goto('/doses/history');
+      await expect(page.getByText('Przyjęto: 3 tabletki', { exact: true })).toBeVisible();
+      await expectNoViolations(page, 'the history with a dose taken differently');
     });
 
     test('read failures and status messages', async ({ page }) => {
@@ -220,6 +308,7 @@ for (const [widthName, viewport] of [
         '/',
         '/medications',
         '/medications/new',
+        '/medications/demo-medication-demoxal',
         '/medications/demo-medication-demoxal/edit',
         '/doses',
         '/doses/history',

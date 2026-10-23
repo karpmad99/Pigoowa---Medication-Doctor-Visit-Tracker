@@ -4,21 +4,32 @@ import { changeDoseStatus, recordDose, undoDose } from '@/features/doses/logic/r
 import type { DoseSlot, ScheduledDose } from '@/features/doses/types';
 import { applyScheduleChange } from '@/features/medications/logic/schedule';
 import { asLocalDate, asLocalTime, asTimestamp } from '@/utils/date';
-import { makeAppointment, makeDoseLog, makeMedication, scheduleTime } from '@/test/fixtures';
+import {
+  makeAppointment,
+  makeDoseLog,
+  makeMedication,
+  makeStockEvent,
+  scheduleTime,
+} from '@/test/fixtures';
 import { RepositoryError } from '../errors';
 import type { Repositories } from '../repositories';
 
 /**
  * Behaviour EVERY implementation of the repository interfaces must have, whatever it stores
- * data in. It knows nothing about localStorage: the local implementation runs it today
- * (src/services/local), and the Supabase implementation of stage 11 must pass it unchanged.
- * Details of one particular storage (corrupt JSON, quota errors, keys) belong in that
- * implementation's own tests, not here.
+ * data in. It knows nothing about localStorage: the local implementation runs it
+ * (src/services/local), and the Supabase implementation (src/services/supabase) runs it against a
+ * real local Supabase stack (supabase/tests/client). Details of one particular storage (corrupt
+ * JSON, quota errors, keys, SQL error codes) belong in that implementation's own tests, not here.
  */
 export interface ContractContext {
   repositories: Repositories;
   /** New repositories over the SAME stored data, as after reloading the application. */
   reopen: () => Repositories;
+  /**
+   * False for a store that cannot tell an optional field that was left out from one that was set to
+   * `null` (a SQL column holds NULL for both). Such a store reads both back as absent. Default true.
+   */
+  distinguishesNullFromAbsent?: boolean;
 }
 
 async function failureOf(promise: Promise<unknown>): Promise<RepositoryError> {
@@ -36,13 +47,19 @@ const MORNING = asLocalTime('08:00');
 const NOW = asTimestamp('2026-10-15T10:00:00Z');
 const CONTEXT = { now: NOW, timeZone: 'Europe/Warsaw' };
 
-export function describeRepositoryContract(name: string, setup: () => ContractContext): void {
+export function describeRepositoryContract(
+  name: string,
+  setup: () => ContractContext | Promise<ContractContext>,
+): void {
   describe(`repository contract: ${name}`, () => {
     let repositories: Repositories;
     let reopen: () => Repositories;
+    let distinguishesNullFromAbsent = true;
 
-    beforeEach(() => {
-      ({ repositories, reopen } = setup());
+    beforeEach(async () => {
+      const context = await setup();
+      ({ repositories, reopen } = context);
+      distinguishesNullFromAbsent = context.distinguishesNullFromAbsent ?? true;
     });
 
     describe('medications', () => {
@@ -112,6 +129,42 @@ export function describeRepositoryContract(name: string, setup: () => ContractCo
           { startDate: TODAY, scheduleEffectiveFrom: TODAY, endDate: asLocalDate('2026-10-14') },
         ],
         ['a negative stock quantity', { stock: { quantity: -1, unit: 'tabletka', asOf: NOW } }],
+        ['an unknown dosage form', { dosageForm: 'powder' as never }],
+        ['a strength of zero', { strength: { value: 0, unit: 'mg' } }],
+        ['a negative strength', { strength: { value: -5, unit: 'mg' } }],
+        ['a strength with more than three decimals', { strength: { value: 1.2345, unit: 'mg' } }],
+        ['a strength unit that is not on the list', { strength: { value: 5, unit: 'tabletka' } }],
+        ['a strength without a unit', { strength: { value: 5 } as never }],
+        ['a strength that is not an object', { strength: 'mocny' as never }],
+        [
+          'a negative low-stock threshold',
+          {
+            stock: { quantity: 5, unit: 'tabletka', asOf: NOW },
+            lowStockThreshold: { quantity: -1, unit: 'tabletka' },
+          },
+        ],
+        [
+          'a low-stock threshold with more than three decimals',
+          {
+            stock: { quantity: 5, unit: 'tabletka', asOf: NOW },
+            lowStockThreshold: { quantity: 1.2345, unit: 'tabletka' },
+          },
+        ],
+        [
+          'a low-stock threshold without a unit',
+          {
+            stock: { quantity: 5, unit: 'tabletka', asOf: NOW },
+            lowStockThreshold: { quantity: 1, unit: ' ' },
+          },
+        ],
+        [
+          'a low-stock threshold that is not an object',
+          { stock: { quantity: 5, unit: 'tabletka', asOf: NOW }, lowStockThreshold: 5 as never },
+        ],
+        [
+          'a low-stock threshold with no stock to be about',
+          { stock: null, lowStockThreshold: { quantity: 1, unit: 'tabletka' } },
+        ],
       ])('refuses to store a medication with %s', async (_label, overrides) => {
         const error = await failureOf(
           repositories.medications.create(makeMedication({ id: 'm-1', ...overrides })),
@@ -119,6 +172,124 @@ export function describeRepositoryContract(name: string, setup: () => ContractCo
 
         expect(error.code).toBe('invalid-input');
         expect(await repositories.medications.list()).toEqual([]);
+      });
+
+      it('stores and returns the dosage form and the strength as given', async () => {
+        const medication = makeMedication({
+          id: 'm-1',
+          dosageForm: 'liquid',
+          strength: { value: 2.5, unit: 'mg/ml' },
+        });
+
+        await repositories.medications.create(medication);
+
+        expect(await repositories.medications.get('m-1')).toEqual(medication);
+        expect(await repositories.medications.list()).toEqual([medication]);
+      });
+
+      it('still has the dosage form and the strength after the repositories are reopened', async () => {
+        const medication = makeMedication({
+          id: 'm-1',
+          dosageForm: 'drops',
+          strength: { value: 10, unit: 'mg/ml' },
+        });
+        await repositories.medications.create(medication);
+
+        expect(await reopen().medications.get('m-1')).toEqual(medication);
+      });
+
+      it('stores and returns the low-stock threshold as given, including zero and a unit written freely', async () => {
+        const medication = makeMedication({
+          id: 'm-1',
+          stock: { quantity: 5, unit: 'Opakowanie ', asOf: NOW },
+          lowStockThreshold: { quantity: 0, unit: 'Opakowanie ' },
+        });
+
+        await repositories.medications.create(medication);
+
+        expect(await repositories.medications.get('m-1')).toEqual(medication);
+        expect(await reopen().medications.get('m-1')).toEqual(medication);
+      });
+
+      it('replaces and removes the low-stock threshold on update', async () => {
+        const stock = { quantity: 5, unit: 'tabletka', asOf: NOW };
+        await repositories.medications.create(
+          makeMedication({
+            id: 'm-1',
+            stock,
+            lowStockThreshold: { quantity: 2, unit: 'tabletka' },
+          }),
+        );
+
+        await repositories.medications.update(
+          makeMedication({
+            id: 'm-1',
+            stock,
+            lowStockThreshold: { quantity: 3, unit: 'tabletka' },
+          }),
+        );
+        expect((await repositories.medications.get('m-1')).lowStockThreshold).toEqual({
+          quantity: 3,
+          unit: 'tabletka',
+        });
+
+        await repositories.medications.update(makeMedication({ id: 'm-1', stock }));
+        expect('lowStockThreshold' in (await repositories.medications.get('m-1'))).toBe(false);
+      });
+
+      it('keeps a medication without the optional fields without them: absent stays absent', async () => {
+        await repositories.medications.create(makeMedication({ id: 'm-1' }));
+
+        const read = await repositories.medications.get('m-1');
+
+        expect('dosageForm' in read).toBe(false);
+        expect('strength' in read).toBe(false);
+        expect('lowStockThreshold' in read).toBe(false);
+      });
+
+      it('keeps an explicitly empty strength (null) as null, and does not invent one', async () => {
+        await repositories.medications.create(makeMedication({ id: 'm-1', strength: null }));
+
+        const { strength } = await repositories.medications.get('m-1');
+
+        // A SQL column cannot hold "null" apart from "left out": such a store reads both back as none.
+        expect(distinguishesNullFromAbsent ? strength : (strength ?? null)).toBeNull();
+      });
+
+      it('replaces the dosage form and the strength on update, and removes them when the update has none', async () => {
+        await repositories.medications.create(
+          makeMedication({ id: 'm-1', dosageForm: 'tablet', strength: { value: 500, unit: 'mg' } }),
+        );
+
+        await repositories.medications.update(
+          makeMedication({ id: 'm-1', dosageForm: 'capsule', strength: { value: 1, unit: 'g' } }),
+        );
+        expect(await repositories.medications.get('m-1')).toMatchObject({
+          dosageForm: 'capsule',
+          strength: { value: 1, unit: 'g' },
+        });
+
+        await repositories.medications.update(makeMedication({ id: 'm-1' }));
+        const read = await repositories.medications.get('m-1');
+        expect('dosageForm' in read).toBe(false);
+        expect('strength' in read).toBe(false);
+      });
+
+      it('keeps a unit that is not on any list exactly as it was written', async () => {
+        const unit = 'Inhalacja ';
+        await repositories.medications.create(
+          makeMedication({
+            id: 'm-1',
+            doseUnit: unit,
+            dosageForm: 'inhaler',
+            stock: { quantity: 3, unit, asOf: NOW },
+          }),
+        );
+
+        const read = await repositories.medications.get('m-1');
+
+        expect(read.doseUnit).toBe(unit);
+        expect(read.stock?.unit).toBe(unit);
       });
 
       it('rejects reading a medication that does not exist', async () => {
@@ -211,6 +382,63 @@ export function describeRepositoryContract(name: string, setup: () => ContractCo
         expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toEqual([log]);
       });
 
+      it('stores the amount actually taken and the note beside the plan, and reads them back after a reopen', async () => {
+        const log = makeDoseLog({
+          id: 'l-1',
+          doseAmount: 1,
+          takenAmount: 2,
+          note: 'Zgodnie z zaleceniem lekarza',
+        });
+
+        await repositories.doseLogs.upsert(log);
+
+        const [read] = await repositories.doseLogs.listByDateRange(TODAY, TODAY);
+        expect(read).toEqual(log);
+        expect(read).toMatchObject({ doseAmount: 1, takenAmount: 2 });
+        expect(await reopen().doseLogs.listByDateRange(TODAY, TODAY)).toEqual([log]);
+      });
+
+      it('accepts a note of exactly 500 characters and a smaller amount than the plan', async () => {
+        await repositories.doseLogs.upsert(
+          makeDoseLog({ id: 'l-1', doseAmount: 2, takenAmount: 0.5, note: 'x'.repeat(500) }),
+        );
+
+        expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toHaveLength(1);
+      });
+
+      it('keeps a record saved before these fields without them: absent stays absent', async () => {
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1' }));
+
+        const [read] = await repositories.doseLogs.listByDateRange(TODAY, TODAY);
+
+        expect(read && 'takenAmount' in read).toBe(false);
+        expect(read && 'note' in read).toBe(false);
+      });
+
+      it('replaces the details when the same record is stored again, and removes them when it has none', async () => {
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', takenAmount: 2, note: 'a' }));
+
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', takenAmount: 3, note: 'b' }));
+        expect((await repositories.doseLogs.listByDateRange(TODAY, TODAY))[0]).toMatchObject({
+          takenAmount: 3,
+          note: 'b',
+        });
+
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1' }));
+        const [read] = await repositories.doseLogs.listByDateRange(TODAY, TODAY);
+        expect(read && 'takenAmount' in read).toBe(false);
+        expect(read && 'note' in read).toBe(false);
+        expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toHaveLength(1);
+      });
+
+      it('does not touch the medication or its schedule when a record with an amount is stored', async () => {
+        const before = await repositories.medications.get('med-1');
+
+        await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', takenAmount: 5 }));
+
+        expect(await repositories.medications.get('med-1')).toEqual(before);
+      });
+
       it('refuses a record for a medication that does not exist, storing nothing', async () => {
         const error = await failureOf(
           repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', medicationId: 'ghost' })),
@@ -224,6 +452,14 @@ export function describeRepositoryContract(name: string, setup: () => ContractCo
         ['a dose amount of zero', { doseAmount: 0 }],
         ['a blank unit', { doseUnit: ' ' }],
         ['an unknown status', { status: 'forgotten' as never }],
+        ['an amount taken of zero', { takenAmount: 0 }],
+        ['a negative amount taken', { takenAmount: -1 }],
+        ['an amount taken with more than three decimals', { takenAmount: 1.2345 }],
+        ['an amount taken that is not a number', { takenAmount: '2' as never }],
+        ['an amount taken on a skipped dose', { status: 'skipped' as const, takenAmount: 2 }],
+        ['a note that is too long', { note: 'x'.repeat(501) }],
+        ['a note on a skipped dose', { status: 'skipped' as const, note: 'x' }],
+        ['a note that is not text', { note: 5 as never }],
       ])('refuses a record with %s', async (_label, overrides) => {
         const error = await failureOf(
           repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', ...overrides })),
@@ -590,6 +826,286 @@ export function describeRepositoryContract(name: string, setup: () => ContractCo
         await repositories.appointments.create(appointment);
 
         expect(await reopen().appointments.list()).toEqual([appointment]);
+      });
+    });
+
+    describe('stock events', () => {
+      const withMedication = async (id = 'med-1') => {
+        await repositories.medications.create(
+          makeMedication({ id, stock: { quantity: 10, unit: 'tabletka', asOf: NOW } }),
+        );
+      };
+
+      it('starts empty', async () => {
+        expect(await repositories.stockEvents.list()).toEqual([]);
+        expect(await repositories.stockEvents.listForMedication('med-1')).toEqual([]);
+        expect(await repositories.stockEvents.countForMedication('med-1')).toBe(0);
+      });
+
+      it('appends an event and returns it as given, in the list and in the list of its medication', async () => {
+        await withMedication();
+        const event = makeStockEvent({ id: 'ev-1', note: 'Nowe opakowanie' });
+
+        const appended = await repositories.stockEvents.append(event);
+
+        expect(appended).toEqual(event);
+        expect(await repositories.stockEvents.list()).toEqual([event]);
+        expect(await repositories.stockEvents.listForMedication('med-1')).toEqual([event]);
+        expect(await repositories.stockEvents.countForMedication('med-1')).toBe(1);
+      });
+
+      it('stores the note on the event, and null when there is none', async () => {
+        await withMedication();
+        await repositories.stockEvents.append(makeStockEvent({ id: 'a', note: 'Skąd: apteka' }));
+        await repositories.stockEvents.append(makeStockEvent({ id: 'b', note: null }));
+
+        const events = await repositories.stockEvents.list();
+
+        expect(events.find((event) => event.id === 'a')?.note).toBe('Skąd: apteka');
+        expect(events.find((event) => event.id === 'b')?.note).toBeNull();
+      });
+
+      it('rejects a second event with an existing id and keeps the first unchanged', async () => {
+        await withMedication();
+        await repositories.stockEvents.append(makeStockEvent({ id: 'ev-1', amount: 30 }));
+
+        const error = await failureOf(
+          repositories.stockEvents.append(makeStockEvent({ id: 'ev-1', amount: 99 })),
+        );
+
+        expect(error.code).toBe('duplicate-id');
+        expect(await repositories.stockEvents.list()).toHaveLength(1);
+        expect((await repositories.stockEvents.list())[0]?.amount).toBe(30);
+      });
+
+      it('rejects an event of a medication that does not exist, and stores nothing', async () => {
+        const error = await failureOf(
+          repositories.stockEvents.append(makeStockEvent({ id: 'ev-1', medicationId: 'ghost' })),
+        );
+
+        expect(error.code).toBe('missing-reference');
+        expect(await repositories.stockEvents.list()).toEqual([]);
+      });
+
+      it.each([
+        ['an amount of zero', { amount: 0 }],
+        ['a negative amount', { amount: -1 }],
+        ['an amount with more than three decimals', { amount: 1.2345 }],
+        ['an amount that is too large', { amount: 10_000_000 }],
+        ['a blank unit', { unit: ' ' }],
+        ['an unknown kind', { kind: 'gift' as never }],
+        ['a note that is too long', { note: 'x'.repeat(501) }],
+        ['a blank id', { id: ' ' }],
+        ['a reversal before the event', { reversedAt: asTimestamp('2026-10-01T00:00:00Z') }],
+      ])('refuses to store an event with %s', async (_label, overrides) => {
+        await withMedication();
+
+        const error = await failureOf(
+          repositories.stockEvents.append(makeStockEvent({ id: 'ev-1', ...overrides })),
+        );
+
+        expect(error.code).toBe('invalid-input');
+        expect(await repositories.stockEvents.list()).toEqual([]);
+      });
+
+      it('accepts a note of exactly 500 characters', async () => {
+        await withMedication();
+
+        await repositories.stockEvents.append(
+          makeStockEvent({ id: 'ev-1', note: 'x'.repeat(500) }),
+        );
+
+        expect(await repositories.stockEvents.list()).toHaveLength(1);
+      });
+
+      it('lists events oldest first, and keeps those of another medication apart', async () => {
+        await withMedication('med-1');
+        await withMedication('med-2');
+        await repositories.stockEvents.append(
+          makeStockEvent({ id: 'late', recordedAt: asTimestamp('2026-10-12T08:00:00Z') }),
+        );
+        await repositories.stockEvents.append(
+          makeStockEvent({ id: 'early', recordedAt: asTimestamp('2026-10-11T08:00:00Z') }),
+        );
+        await repositories.stockEvents.append(
+          makeStockEvent({ id: 'other', medicationId: 'med-2' }),
+        );
+
+        expect((await repositories.stockEvents.list()).map((event) => event.id)).toEqual([
+          'other',
+          'early',
+          'late',
+        ]);
+        expect(
+          (await repositories.stockEvents.listForMedication('med-1')).map((event) => event.id),
+        ).toEqual(['early', 'late']);
+        expect(await repositories.stockEvents.countForMedication('med-2')).toBe(1);
+      });
+
+      it('an unknown medication has no events and counts zero: that is not an error', async () => {
+        expect(await repositories.stockEvents.listForMedication('nope')).toEqual([]);
+        expect(await repositories.stockEvents.countForMedication('nope')).toBe(0);
+      });
+
+      it('is still there after the repositories are reopened (persistence)', async () => {
+        await withMedication();
+        const event = makeStockEvent({ id: 'ev-1', note: 'Notatka' });
+        await repositories.stockEvents.append(event);
+
+        expect(await reopen().stockEvents.list()).toEqual([event]);
+      });
+
+      it('stores a waste event the same way, with its note, and keeps the doses untouched', async () => {
+        await withMedication();
+        const waste = makeStockEvent({ id: 'w-1', kind: 'waste', amount: 2, note: 'Wypadły' });
+        const before = await repositories.doseLogs.listByDateRange(TODAY, TODAY);
+
+        await repositories.stockEvents.append(waste);
+
+        expect(await repositories.stockEvents.list()).toEqual([waste]);
+        expect(await reopen().stockEvents.list()).toEqual([waste]);
+        expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toEqual(before);
+        expect(await repositories.medications.get('med-1')).toMatchObject({
+          scheduleTimes: [expect.objectContaining({ timeOfDay: '08:00' })],
+        });
+      });
+
+      it('reverses a waste event like any other: kept, marked, repeated reversal changes nothing', async () => {
+        await withMedication();
+        await repositories.stockEvents.append(makeStockEvent({ id: 'w-1', kind: 'waste' }));
+
+        const first = await repositories.stockEvents.reverse('w-1', NOW);
+        const second = await repositories.stockEvents.reverse(
+          'w-1',
+          asTimestamp('2026-10-16T10:00:00Z'),
+        );
+
+        expect(first).toMatchObject({ kind: 'waste', reversedAt: NOW });
+        expect(second).toEqual(first);
+      });
+
+      describe('reversal', () => {
+        const REVERSED_AT = asTimestamp('2026-10-15T10:00:00Z');
+
+        it('marks the event as reversed and keeps it, with everything else as it was', async () => {
+          await withMedication();
+          const event = makeStockEvent({ id: 'ev-1', note: 'Notatka' });
+          await repositories.stockEvents.append(event);
+
+          const reversed = await repositories.stockEvents.reverse('ev-1', REVERSED_AT);
+
+          expect(reversed).toEqual({ ...event, reversedAt: REVERSED_AT });
+          expect(await repositories.stockEvents.list()).toEqual([reversed]);
+          expect(await reopen().stockEvents.list()).toEqual([reversed]);
+          expect(await repositories.stockEvents.countForMedication('med-1')).toBe(1);
+        });
+
+        it('reversing again changes nothing, not even the moment', async () => {
+          await withMedication();
+          await repositories.stockEvents.append(makeStockEvent({ id: 'ev-1' }));
+          const first = await repositories.stockEvents.reverse('ev-1', REVERSED_AT);
+
+          const second = await repositories.stockEvents.reverse(
+            'ev-1',
+            asTimestamp('2026-10-16T10:00:00Z'),
+          );
+
+          expect(second).toEqual(first);
+          expect((await repositories.stockEvents.list())[0]?.reversedAt).toBe(REVERSED_AT);
+        });
+
+        it('touches only the event it names', async () => {
+          await withMedication();
+          await repositories.stockEvents.append(makeStockEvent({ id: 'a' }));
+          const other = await repositories.stockEvents.append(makeStockEvent({ id: 'b' }));
+
+          await repositories.stockEvents.reverse('a', REVERSED_AT);
+
+          expect((await repositories.stockEvents.list()).find((event) => event.id === 'b')).toEqual(
+            other,
+          );
+        });
+
+        it('rejects an event that does not exist', async () => {
+          const error = await failureOf(repositories.stockEvents.reverse('nope', REVERSED_AT));
+
+          expect(error.code).toBe('not-found');
+        });
+
+        it('rejects a moment before the event was recorded, and keeps the event as it was', async () => {
+          await withMedication();
+          const event = makeStockEvent({ id: 'ev-1' });
+          await repositories.stockEvents.append(event);
+
+          const error = await failureOf(
+            repositories.stockEvents.reverse('ev-1', asTimestamp('2026-10-01T00:00:00Z')),
+          );
+
+          expect(error.code).toBe('invalid-input');
+          expect(await repositories.stockEvents.list()).toEqual([event]);
+        });
+      });
+
+      describe('together with the medication (cascade)', () => {
+        it('deleting a medication deletes its events, and only its events', async () => {
+          await withMedication('med-1');
+          await withMedication('med-2');
+          await repositories.stockEvents.append(makeStockEvent({ id: 'a', medicationId: 'med-1' }));
+          await repositories.stockEvents.append(makeStockEvent({ id: 'b', medicationId: 'med-1' }));
+          const kept = await repositories.stockEvents.append(
+            makeStockEvent({ id: 'c', medicationId: 'med-2' }),
+          );
+
+          await repositories.medications.remove('med-1');
+
+          expect(await repositories.stockEvents.list()).toEqual([kept]);
+          expect(await repositories.stockEvents.countForMedication('med-1')).toBe(0);
+          expect(await reopen().stockEvents.list()).toEqual([kept]);
+        });
+
+        it('also removes the reversed events: nothing is left of a deleted medication', async () => {
+          await withMedication();
+          await repositories.stockEvents.append(makeStockEvent({ id: 'a' }));
+          await repositories.stockEvents.reverse('a', NOW);
+
+          await repositories.medications.remove('med-1');
+
+          expect(await repositories.stockEvents.list()).toEqual([]);
+        });
+
+        it('deleting a medication with intake records and events removes all of them', async () => {
+          await withMedication();
+          await repositories.doseLogs.upsert(makeDoseLog({ id: 'l-1', medicationId: 'med-1' }));
+          await repositories.stockEvents.append(makeStockEvent({ id: 'a' }));
+
+          await repositories.medications.remove('med-1');
+
+          expect(await repositories.doseLogs.listByDateRange(TODAY, TODAY)).toEqual([]);
+          expect(await repositories.stockEvents.list()).toEqual([]);
+          expect(await repositories.medications.list()).toEqual([]);
+        });
+
+        it('deleting a medication that has no events leaves the other events alone', async () => {
+          await withMedication('med-1');
+          await withMedication('med-2');
+          const kept = await repositories.stockEvents.append(
+            makeStockEvent({ id: 'c', medicationId: 'med-2' }),
+          );
+
+          await repositories.medications.remove('med-1');
+
+          expect(await repositories.stockEvents.list()).toEqual([kept]);
+        });
+
+        it('keeps the events when the medication is only updated (ended)', async () => {
+          await withMedication();
+          const event = await repositories.stockEvents.append(makeStockEvent({ id: 'a' }));
+          const medication = await repositories.medications.get('med-1');
+
+          await repositories.medications.update({ ...medication, endDate: TODAY });
+
+          expect(await repositories.stockEvents.list()).toEqual([event]);
+        });
       });
     });
 

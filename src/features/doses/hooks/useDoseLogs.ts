@@ -10,5 +10,5 @@ export function useDoseLogs(from: LocalDate, to: LocalDate, options?: AsyncDataO
     () => repositories.doseLogs.listByDateRange(from, to),
     [repositories, from, to],
   );
-  return useAsyncData(load, options);
+  return useAsyncData(['doseLogs', from, to], load, options);
 }

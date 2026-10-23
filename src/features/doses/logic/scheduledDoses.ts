@@ -92,7 +92,7 @@ function compareIds(a: Id, b: Id): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function compareDoses(a: ScheduledDose, b: ScheduledDose): number {
+export function compareDoses(a: ScheduledDose, b: ScheduledDose): number {
   return (
     compareLocalTimes(a.time, b.time) ||
     nameCollator.compare(a.medicationName, b.medicationName) ||

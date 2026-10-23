@@ -1,4 +1,5 @@
 import type { DoseLog } from '@/features/doses/types';
+import type { StockEvent } from '@/features/stock/types';
 import type { LocalDate } from '@/types/primitives';
 import type { Medication } from '../types';
 import { getMedicationStatus } from './status';
@@ -32,9 +33,11 @@ const nameCollator = new Intl.Collator('pl');
 export function summarizeStock(input: {
   medications: readonly Medication[];
   doseLogs: readonly DoseLog[];
+  /** The stock events (refills, waste); omitted means none. */
+  stockEvents?: readonly StockEvent[];
   today: LocalDate;
 }): StockOverview {
-  const { medications, doseLogs, today } = input;
+  const { medications, doseLogs, stockEvents, today } = input;
   const items: StockOverviewItem[] = [];
   let unavailableCount = 0;
 
@@ -43,7 +46,7 @@ export function summarizeStock(input: {
     // medication's status, not by the estimate's reason: without stock the estimate says "no
     // stock" before it says "ended".
     if (getMedicationStatus(medication, today) === 'ended') continue;
-    const estimate = estimateStock({ medication, doseLogs, today });
+    const estimate = estimateStock({ medication, doseLogs, stockEvents, today });
     if (estimate.available) items.push({ medication, estimate });
     else unavailableCount += 1;
   }

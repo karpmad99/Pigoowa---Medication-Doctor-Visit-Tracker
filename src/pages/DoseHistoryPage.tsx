@@ -408,7 +408,10 @@ export function DoseHistoryPage() {
               </strong>
               , {formatLocalDay(deleteTarget.log.scheduledDate)}, {deleteTarget.log.scheduledTime}:{' '}
               {doseStatusLabel(deleteTarget.log.status).toLowerCase()},{' '}
-              {formatAmount(deleteTarget.log.doseAmount, deleteTarget.log.doseUnit)}.
+              {deleteTarget.log.takenAmount === undefined
+                ? formatAmount(deleteTarget.log.doseAmount, deleteTarget.log.doseUnit)
+                : `przyjęto ${formatAmount(deleteTarget.log.takenAmount, deleteTarget.log.doseUnit)}, planowano ${formatAmount(deleteTarget.log.doseAmount, deleteTarget.log.doseUnit)}`}
+              .
             </p>
             <p>
               Zapis jest poza aktualnym harmonogramem.{' '}

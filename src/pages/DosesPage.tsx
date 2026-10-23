@@ -5,6 +5,7 @@ import { ButtonLink } from '@/components/ui/ButtonLink';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Icon } from '@/components/ui/Icon';
+import { ModuleCard } from '@/components/ui/ModuleCard';
 import { Spinner } from '@/components/ui/Spinner';
 import { DaySelector } from '@/features/doses/components/DaySelector';
 import { IntakeRecordItem } from '@/features/doses/components/IntakeRecordItem';
@@ -19,6 +20,8 @@ import { doseSlotKey } from '@/features/doses/logic/slots';
 import { StockExplanation } from '@/features/medications/components/StockExplanation';
 import { StockSummary } from '@/features/medications/components/StockSummary';
 import { useMedications } from '@/features/medications/hooks/useMedications';
+import { StockStatement } from '@/features/stock/components/StockStatement';
+import { useStockEvents } from '@/features/stock/hooks/useStockEvents';
 import { estimateStock } from '@/features/medications/logic/stock';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useServices } from '@/hooks/useServices';
@@ -53,6 +56,9 @@ export function DosesPage() {
   // list all come from this one answer, so changing the day never has a stale request to race.
   const doseLogs = useDoseLogs(EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE, { keepDataOnReload: true });
   const actions = useDoseListActions({ onRefresh: doseLogs.reload });
+  // The stock estimate below also adds refills and subtracts waste. A failure to read them is
+  // reported in the stock part only, so the doses stay usable.
+  const stockEvents = useStockEvents();
 
   const medicationList = medications.data;
   const logList = doseLogs.data;
@@ -77,6 +83,7 @@ export function DosesPage() {
   };
 
   const reloadAll = () => {
+    stockEvents.reload();
     medications.reload();
     doseLogs.reload();
   };
@@ -114,6 +121,7 @@ export function DosesPage() {
         )}
 
         <DoseFeedbackMessage feedback={actions.feedback} onDismiss={actions.dismissFeedback} />
+        {actions.dialogs}
 
         {!canRecord && (
           <p className="flex items-start gap-3 rounded-card border border-line bg-surface p-4 text-ink-muted">
@@ -153,12 +161,9 @@ export function DosesPage() {
                 description="Żaden lek nie ma w tym dniu godzin przyjmowania. Mogły się skończyć albo jeszcze się nie zacząć."
               />
             ) : (
-              <section aria-labelledby="doses-heading" className="space-y-3">
-                <h2 id="doses-heading" className="text-lg font-semibold">
-                  Zaplanowane dawki ({String(day.doses.length)})
-                </h2>
+              <ModuleCard title={`Zaplanowane dawki (${String(day.doses.length)})`}>
                 {summary !== null && (
-                  <p className="text-sm text-ink-muted">
+                  <p className="text-base text-ink-muted">
                     Przyjęte: {String(summary.taken)}. Pominięte: {String(summary.skipped)}. Bez
                     zapisu: {String(summary.unrecorded)}.
                   </p>
@@ -174,18 +179,18 @@ export function DosesPage() {
                       timeZone={timeZone}
                       focusRequest={actions.focusRequest}
                       onAction={actions.handleAction}
+                      onDetails={actions.openDetails}
                     />
                   ))}
                 </ul>
-              </section>
+              </ModuleCard>
             )}
 
             {day.outsideSchedule.length > 0 && (
-              <section aria-labelledby="outside-heading" className="space-y-3">
-                <h2 id="outside-heading" className="text-lg font-semibold">
-                  Wpisy poza aktualnym harmonogramem ({String(day.outsideSchedule.length)})
-                </h2>
-                <p className="text-sm text-ink-muted">
+              <ModuleCard
+                title={`Wpisy poza aktualnym harmonogramem (${String(day.outsideSchedule.length)})`}
+              >
+                <p className="text-base text-ink-muted">
                   Te zapisy dotyczą tego dnia, ale obecny harmonogram nie planuje już takich dawek.
                   Zostają w historii bez zmian i nie można ich tu zmienić ani zapisać ponownie.
                   Błędny zapis możesz usunąć w historii przyjmowania.
@@ -206,31 +211,44 @@ export function DosesPage() {
                     />
                   ))}
                 </ul>
-              </section>
+              </ModuleCard>
             )}
 
             {medicationsOfDay.length > 0 && logList !== undefined && (
-              <section aria-labelledby="stock-heading" className="space-y-3">
-                <h2 id="stock-heading" className="text-lg font-semibold">
-                  Szacunkowy zapas (stan na dziś)
-                </h2>
+              <ModuleCard title="Szacunkowy zapas (stan na dziś)">
                 <ul className="space-y-2">
                   {medicationsOfDay.map((medication) => (
                     <li
                       key={medication.id}
-                      className="rounded-card border border-line bg-surface p-4"
+                      className="rounded-card border border-line bg-canvas p-4"
                     >
-                      <p className="break-words font-medium">{medication.name}</p>
-                      <p className="text-sm text-ink-muted">
+                      <p className="break-words text-lg font-semibold">{medication.name}</p>
+                      <p className="text-base text-ink-muted">
                         <StockSummary
-                          estimate={estimateStock({ medication, doseLogs: logList, today })}
+                          estimate={
+                            stockEvents.error !== undefined
+                              ? 'failed'
+                              : stockEvents.isLoading
+                                ? 'loading'
+                                : estimateStock({
+                                    medication,
+                                    doseLogs: logList,
+                                    stockEvents: stockEvents.data,
+                                    today,
+                                  })
+                          }
+                          threshold={medication.lowStockThreshold}
+                          basis={medication.stock?.basis}
                         />
+                      </p>
+                      <p className="text-base text-ink-muted">
+                        <StockStatement medication={medication} timeZone={timeZone} />
                       </p>
                     </li>
                   ))}
                 </ul>
                 <StockExplanation />
-              </section>
+              </ModuleCard>
             )}
           </>
         )}

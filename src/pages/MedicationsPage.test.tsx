@@ -162,9 +162,7 @@ describe('medication list: what a medication shows', () => {
     const stock = (await (await findCard('Bez zapasu')).findByText(/Szacunek niedostępny/))
       .textContent;
 
-    expect(stock).toBe(
-      'Szacunek niedostępny: zapas nie został skonfigurowany. Wpisz go, edytując lek.',
-    );
+    expect(stock).toBe('Szacunek niedostępny: zapas nie został policzony.');
     expect(stock).not.toMatch(/\d/);
   });
 
@@ -333,6 +331,80 @@ describe('medication list: what a medication shows', () => {
     expect(
       await demoxal.findByText('Obecny harmonogram obowiązuje od 5 października 2026.'),
     ).toBeVisible();
+  });
+});
+
+describe('medication list: dosage form and strength', () => {
+  it('shows the form and the strength as information, with a note that the strength changes no dose or stock', async () => {
+    const services = createTestServices();
+    await seed(services, {
+      id: 'm-1',
+      name: 'Demoxal',
+      dosageForm: 'tablet',
+      strength: { value: 500, unit: 'mg' },
+    });
+    renderApp(services);
+
+    const demoxal = await findCard('Demoxal');
+
+    expect(demoxal.getByText('Postać')).toBeVisible();
+    expect(demoxal.getByText('Tabletki')).toBeVisible();
+    expect(demoxal.getByText('Moc (informacja)')).toBeVisible();
+    expect(demoxal.getByText(/^500 mg/)).toBeVisible();
+    expect(demoxal.getByText(/nie wpływa na dawkę ani na zapas/)).toBeVisible();
+  });
+
+  it('shows nothing about a form or a strength for an older medication that has neither', async () => {
+    const services = createTestServices();
+    await seed(services, { id: 'm-1', name: 'Stary lek' });
+    renderApp(services);
+
+    const old = await findCard('Stary lek');
+
+    expect(old.queryByText('Postać')).not.toBeInTheDocument();
+    expect(old.queryByText('Moc (informacja)')).not.toBeInTheDocument();
+    expect(old.queryByText('Jednostka spoza listy')).not.toBeInTheDocument();
+    expect(old.getByText(/— 1 tabletka/)).toBeVisible();
+  });
+
+  it('shows a null strength as no strength', async () => {
+    const services = createTestServices();
+    await seed(services, { id: 'm-1', name: 'Lek', dosageForm: 'capsule', strength: null });
+    renderApp(services);
+
+    expect((await findCard('Lek')).queryByText('Moc (informacja)')).not.toBeInTheDocument();
+  });
+
+  it('marks a unit that is not on the list of its form, neutrally, and shows it as stored', async () => {
+    const services = createTestServices();
+    await seed(services, {
+      id: 'm-1',
+      name: 'Inhalator',
+      dosageForm: 'inhaler',
+      doseUnit: 'inhalacja',
+      scheduleTimes: [scheduleTime('t-1', '08:00', 2)],
+    });
+    renderApp(services);
+
+    const inhaler = await findCard('Inhalator');
+
+    expect(inhaler.getByText('Jednostka spoza listy')).toBeVisible();
+    expect(inhaler.getByText(/Zostaje bez zmian/)).toBeVisible();
+    expect(inhaler.getByText('08:00 — 2 inhalacja')).toBeVisible();
+  });
+
+  it('does not mark a listed unit, or any unit for "other"', async () => {
+    const services = createTestServices();
+    await seed(
+      services,
+      { id: 'm-1', name: 'Tabletki', dosageForm: 'tablet', doseUnit: 'tabletka' },
+      { id: 'm-2', name: 'Inne', dosageForm: 'other', doseUnit: 'cokolwiek' },
+    );
+    renderApp(services);
+
+    await findCard('Inne');
+
+    expect(screen.queryByText('Jednostka spoza listy')).not.toBeInTheDocument();
   });
 });
 

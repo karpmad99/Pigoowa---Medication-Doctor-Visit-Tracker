@@ -3,7 +3,13 @@ import type { DoseLog } from '@/features/doses/types';
 import { doseLogSlot, doseSlotKey } from '@/features/doses/logic/slots';
 import type { Medication } from '@/features/medications/types';
 import type { CollectionSpec } from './collection';
-import { validateAppointment, validateDoseLog, validateMedication } from './validation';
+import type { StockEvent } from '@/features/stock/types';
+import {
+  validateAppointment,
+  validateDoseLog,
+  validateMedication,
+  validateStockEvent,
+} from './validation';
 
 /**
  * The storage keys. The "v1" is the storage format version (see collection.ts). Each kind of
@@ -13,7 +19,9 @@ export const STORAGE_KEYS = {
   medications: 'pigoowa:v1:medications',
   doseLogs: 'pigoowa:v1:dose-logs',
   appointments: 'pigoowa:v1:appointments',
-  /** One slot holding the previous contents of the three keys above after a demo data reset. */
+  /** The append-only ledger of stock changes (refills, waste), PROJECT_SPEC DEC-47. */
+  stockEvents: 'pigoowa:v1:stock-events',
+  /** One slot holding the previous contents of the four keys above after a demo data reset. */
   backup: 'pigoowa:v1:backup',
 } as const;
 
@@ -37,4 +45,11 @@ export const appointmentCollection: CollectionSpec<Appointment> = {
   name: 'appointments',
   validate: validateAppointment,
   idOf: (appointment) => appointment.id,
+};
+
+export const stockEventCollection: CollectionSpec<StockEvent> = {
+  key: STORAGE_KEYS.stockEvents,
+  name: 'stockEvents',
+  validate: validateStockEvent,
+  idOf: (event) => event.id,
 };

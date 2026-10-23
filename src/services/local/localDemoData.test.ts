@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createFixedClock } from '@/utils/clock';
-import { asLocalDate } from '@/utils/date';
+import { asLocalDate, asTimestamp as asTimestampForTest } from '@/utils/date';
 import { createFakeStorage, createQuotaError, type FakeStorage } from '@/test/fakeStorage';
-import { makeMedication } from '@/test/fixtures';
+import { makeMedication, makeStockEvent } from '@/test/fixtures';
 import { createDemoData, isDemoId } from '../demo/demoData';
 import { RepositoryError } from '../errors';
 import { STORAGE_KEYS } from './collections';
@@ -10,7 +10,12 @@ import { createLocalServices } from './createLocalServices';
 
 const INSTANT = '2026-10-15T10:00:00Z';
 const TIME_ZONE = 'Europe/Warsaw';
-const dataKeys = [STORAGE_KEYS.medications, STORAGE_KEYS.doseLogs, STORAGE_KEYS.appointments];
+const dataKeys = [
+  STORAGE_KEYS.medications,
+  STORAGE_KEYS.doseLogs,
+  STORAGE_KEYS.appointments,
+  STORAGE_KEYS.stockEvents,
+];
 
 function setup(storage: FakeStorage = createFakeStorage()) {
   const services = createLocalServices({
@@ -221,5 +226,104 @@ describe('resetDemoData', () => {
     expect(
       (await repositories.medications.list()).every((medication) => isDemoId(medication.id)),
     ).toBe(true);
+  });
+});
+
+describe('the stock events and the demo data', () => {
+  it('loads demo stock events too, readable through the repository, all marked as demo data', async () => {
+    const { storage, repositories, demoData } = setup();
+
+    await demoData.loadDemoData();
+
+    const events = await repositories.stockEvents.list();
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((event) => isDemoId(event.id))).toBe(true);
+    expect(storage.data.has(STORAGE_KEYS.stockEvents)).toBe(true);
+    // The events belong to demo medications that exist.
+    const medicationIds = new Set((await repositories.medications.list()).map((m) => m.id));
+    expect(events.every((event) => medicationIds.has(event.medicationId))).toBe(true);
+  });
+
+  it('refuses to load when only the stock events are stored, rather than mixing them with demo data', async () => {
+    const { storage, demoData } = setup(
+      createFakeStorage({
+        [STORAGE_KEYS.stockEvents]: JSON.stringify({ version: 2, items: [] }),
+      }),
+    );
+    const before = snapshot(storage);
+
+    const error = await failureOf(demoData.loadDemoData());
+
+    expect(error.code).toBe('demo-data-not-empty');
+    expect(snapshot(storage)).toEqual(before);
+  });
+
+  it('leaves no half-loaded data behind when writing the stock events fails', async () => {
+    const { storage, demoData } = setup();
+
+    storage.failWrites(createQuotaError(), (key) => key === STORAGE_KEYS.stockEvents);
+    const error = await failureOf(demoData.loadDemoData());
+
+    expect(error.detail).toBe('rolled back');
+    for (const key of dataKeys) expect(storage.data.has(key)).toBe(false);
+  });
+
+  it("replaces the user's own events on reset, after saving them verbatim to the backup", async () => {
+    const { storage, repositories, demoData } = setup();
+    await repositories.medications.create(
+      makeMedication({
+        id: 'mine-1',
+        stock: { quantity: 5, unit: 'tabletka', asOf: asTimestampForTest('2026-10-01T08:00:00Z') },
+      }),
+    );
+    await repositories.stockEvents.append(
+      makeStockEvent({ id: 'my-event', medicationId: 'mine-1' }),
+    );
+    const previousEvents = storage.data.get(STORAGE_KEYS.stockEvents);
+
+    await demoData.resetDemoData();
+
+    const events = await repositories.stockEvents.list();
+    expect(events.map((event) => event.id)).not.toContain('my-event');
+    expect(events.every((event) => isDemoId(event.id))).toBe(true);
+    const backup = JSON.parse(storage.data.get(STORAGE_KEYS.backup) ?? 'null') as {
+      entries: Record<string, string | null>;
+    };
+    expect(backup.entries[STORAGE_KEYS.stockEvents]).toBe(previousEvents);
+    expect(previousEvents).toContain('my-event');
+  });
+
+  it('records a missing stock events key in the backup as null', async () => {
+    const { storage, demoData } = setup();
+
+    await demoData.resetDemoData();
+
+    const backup = JSON.parse(storage.data.get(STORAGE_KEYS.backup) ?? 'null') as {
+      entries: Record<string, string | null>;
+    };
+    expect(STORAGE_KEYS.stockEvents in backup.entries).toBe(true);
+    expect(backup.entries[STORAGE_KEYS.stockEvents]).toBeNull();
+  });
+
+  it('restores the previous events if writing the demo data fails after them', async () => {
+    const { storage, repositories, demoData } = setup();
+    await repositories.medications.create(
+      makeMedication({
+        id: 'mine-1',
+        stock: { quantity: 5, unit: 'tabletka', asOf: asTimestampForTest('2026-10-01T08:00:00Z') },
+      }),
+    );
+    await repositories.stockEvents.append(
+      makeStockEvent({ id: 'my-event', medicationId: 'mine-1' }),
+    );
+    const before = snapshot(storage);
+
+    // The stock events are written last: a refusal there must undo the three writes before it.
+    storage.failWrites(createQuotaError(), (key) => key === STORAGE_KEYS.stockEvents);
+    const error = await failureOf(demoData.resetDemoData());
+
+    expect(error.detail).toBe('rolled back');
+    const after = snapshot(storage);
+    for (const key of dataKeys) expect(after[key]).toBe(before[key]);
   });
 });

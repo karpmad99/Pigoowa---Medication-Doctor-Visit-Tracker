@@ -283,7 +283,7 @@ describe('day view: which doses are planned', () => {
     expect(
       rows.map((row) => [
         row.querySelector('time')?.textContent,
-        row.querySelector('p.font-medium')?.textContent,
+        row.querySelector('p.text-lg.font-semibold')?.textContent,
       ]),
     ).toEqual([
       ['08:00', 'Ąbc'],
@@ -941,7 +941,7 @@ describe('day view: stock', () => {
 
     await screen.findByRole('region', { name: 'Szacunkowy zapas (stan na dziś)' });
     expect(stockLine('Demoxal')).toHaveTextContent(
-      'Szacunek niedostępny: zapas nie został skonfigurowany.',
+      'Szacunek niedostępny: zapas nie został policzony.',
     );
     expect(stockLine('Demoxal')).not.toHaveTextContent(/\d/);
   });

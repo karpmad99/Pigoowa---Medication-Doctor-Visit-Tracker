@@ -1,11 +1,28 @@
 import { APPOINTMENT_LIMITS } from '@/features/appointments/logic/validation';
 import type { Appointment, AppointmentStatus } from '@/features/appointments/types';
 import type { DoseLog } from '@/features/doses/types';
+import { DOSE_NOTE_MAX } from '@/features/doses/logic/limits';
+import { STOCK_EVENT_NOTE_MAX } from '@/features/stock/logic/limits';
+import type { StockEvent } from '@/features/stock/types';
+import { isDosageForm, isStrengthUnit } from '@/features/medications/logic/dosageForms';
 import { MEDICATION_LIMITS } from '@/features/medications/logic/limits';
 import { MAX_UNIT_LENGTH } from '@/features/medications/logic/stock';
-import type { Medication, MedicationStock, ScheduleTime } from '@/features/medications/types';
+import type {
+  DosageForm,
+  Medication,
+  LowStockThreshold,
+  MedicationStock,
+  MedicationStrength,
+  ScheduleTime,
+} from '@/features/medications/types';
 import type { Id, LocalDate, LocalTime, Timestamp } from '@/types/primitives';
-import { compareLocalDates, parseLocalDate, parseLocalTime, parseTimestamp } from '@/utils/date';
+import {
+  compareLocalDates,
+  compareTimestamps,
+  parseLocalDate,
+  parseLocalTime,
+  parseTimestamp,
+} from '@/utils/date';
 import { isValidQuantity } from '@/utils/quantity';
 
 // TypeScript types describe data the program creates; they say nothing about JSON read back
@@ -82,7 +99,29 @@ function validateStock(input: unknown, path: string): Validated<MedicationStock 
   if (unit === null) return fail(`${path}.unit`);
   const asOf = readTimestamp(input.asOf);
   if (asOf === null) return fail(`${path}.asOf`);
-  return { ok: true, value: { quantity, unit, asOf } };
+  // `basis` is optional: absent means "counted" and stays absent (older data is not rewritten).
+  if (input.basis === undefined) return { ok: true, value: { quantity, unit, asOf } };
+  if (input.basis !== 'counted' && input.basis !== 'new-package') return fail(`${path}.basis`);
+  return { ok: true, value: { quantity, unit, asOf, basis: input.basis } };
+}
+
+function validateStrength(input: unknown, path: string): Validated<MedicationStrength | null> {
+  if (input === null) return { ok: true, value: null };
+  if (!isRecord(input)) return fail(path);
+  const value = readNumber(input.value, false);
+  if (value === null) return fail(`${path}.value`);
+  if (!isStrengthUnit(input.unit)) return fail(`${path}.unit`);
+  return { ok: true, value: { value, unit: input.unit } };
+}
+
+function validateThreshold(input: unknown, path: string): Validated<LowStockThreshold | null> {
+  if (input === null) return { ok: true, value: null };
+  if (!isRecord(input)) return fail(path);
+  const quantity = readNumber(input.quantity, true);
+  if (quantity === null) return fail(`${path}.quantity`);
+  const unit = readText(input.unit, 1, MAX_UNIT_LENGTH);
+  if (unit === null) return fail(`${path}.unit`);
+  return { ok: true, value: { quantity, unit } };
 }
 
 function validateScheduleTimes(input: unknown, path: string): Validated<ScheduleTime[]> {
@@ -131,6 +170,27 @@ export function validateMedication(input: unknown, path = 'medication'): Validat
   if (!scheduleTimes.ok) return scheduleTimes;
   const stock = validateStock(input.stock, `${path}.stock`);
   if (!stock.ok) return stock;
+  // The two optional fields of stage F4 are absent on a medication saved before they existed, and
+  // stay absent: a missing field is never turned into a value (or into `null`) here.
+  let dosageForm: DosageForm | undefined;
+  if (input.dosageForm !== undefined) {
+    if (!isDosageForm(input.dosageForm)) return fail(`${path}.dosageForm`);
+    dosageForm = input.dosageForm;
+  }
+  let strength: MedicationStrength | null | undefined;
+  if (input.strength !== undefined) {
+    const checked = validateStrength(input.strength, `${path}.strength`);
+    if (!checked.ok) return checked;
+    strength = checked.value;
+  }
+  // An own threshold needs a stock to be about (docs/DATABASE.md); absent stays absent.
+  let lowStockThreshold: LowStockThreshold | null | undefined;
+  if (input.lowStockThreshold !== undefined) {
+    const checked = validateThreshold(input.lowStockThreshold, `${path}.lowStockThreshold`);
+    if (!checked.ok) return checked;
+    if (checked.value !== null && stock.value === null) return fail(`${path}.lowStockThreshold`);
+    lowStockThreshold = checked.value;
+  }
   const createdAt = readTimestamp(input.createdAt);
   if (createdAt === null) return fail(`${path}.createdAt`);
   const updatedAt = readTimestamp(input.updatedAt);
@@ -142,6 +202,9 @@ export function validateMedication(input: unknown, path = 'medication'): Validat
       id,
       name,
       doseUnit,
+      ...(dosageForm === undefined ? {} : { dosageForm }),
+      ...(strength === undefined ? {} : { strength }),
+      ...(lowStockThreshold === undefined ? {} : { lowStockThreshold }),
       notes,
       startDate,
       endDate,
@@ -172,6 +235,23 @@ export function validateDoseLog(input: unknown, path = 'doseLog'): Validated<Dos
   const recordedAt = readTimestamp(input.recordedAt);
   if (recordedAt === null) return fail(`${path}.recordedAt`);
 
+  // The two optional fields of stage F8 belong to a taken dose only, and absent stays absent: a
+  // record saved before them is not rewritten into one that has them.
+  let takenAmount: number | undefined;
+  if (input.takenAmount !== undefined) {
+    if (input.status !== 'taken') return fail(`${path}.takenAmount`);
+    const amount = readNumber(input.takenAmount, false);
+    if (amount === null) return fail(`${path}.takenAmount`);
+    takenAmount = amount;
+  }
+  let note: string | null | undefined;
+  if (input.note !== undefined) {
+    const checked = readNullableText(input.note, DOSE_NOTE_MAX);
+    if (checked === undefined) return fail(`${path}.note`);
+    if (checked !== null && input.status !== 'taken') return fail(`${path}.note`);
+    note = checked;
+  }
+
   return {
     ok: true,
     value: {
@@ -183,6 +263,8 @@ export function validateDoseLog(input: unknown, path = 'doseLog'): Validated<Dos
       doseAmount,
       doseUnit,
       recordedAt,
+      ...(takenAmount === undefined ? {} : { takenAmount }),
+      ...(note === undefined ? {} : { note }),
     },
   };
 }
@@ -227,5 +309,33 @@ export function validateAppointment(input: unknown, path = 'appointment'): Valid
       createdAt,
       updatedAt,
     },
+  };
+}
+
+export function validateStockEvent(input: unknown, path = 'stockEvent'): Validated<StockEvent> {
+  if (!isRecord(input)) return fail(path);
+  const id = readId(input.id);
+  if (id === null) return fail(`${path}.id`);
+  const medicationId = readId(input.medicationId);
+  if (medicationId === null) return fail(`${path}.medicationId`);
+  if (input.kind !== 'refill' && input.kind !== 'waste') return fail(`${path}.kind`);
+  const amount = readNumber(input.amount, false);
+  if (amount === null) return fail(`${path}.amount`);
+  const unit = readText(input.unit, 1, MAX_UNIT_LENGTH);
+  if (unit === null) return fail(`${path}.unit`);
+  const recordedAt = readTimestamp(input.recordedAt);
+  if (recordedAt === null) return fail(`${path}.recordedAt`);
+  const note = readNullableText(input.note, STOCK_EVENT_NOTE_MAX);
+  if (note === undefined) return fail(`${path}.note`);
+  let reversedAt: Timestamp | null = null;
+  if (input.reversedAt !== null) {
+    reversedAt = readTimestamp(input.reversedAt);
+    if (reversedAt === null || compareTimestamps(reversedAt, recordedAt) < 0) {
+      return fail(`${path}.reversedAt`);
+    }
+  }
+  return {
+    ok: true,
+    value: { id, medicationId, kind: input.kind, amount, unit, recordedAt, note, reversedAt },
   };
 }

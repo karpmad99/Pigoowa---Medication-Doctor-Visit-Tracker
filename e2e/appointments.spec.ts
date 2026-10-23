@@ -210,7 +210,9 @@ test.describe('adding and editing', () => {
       page.getByText('Wpisz lekarza lub specjalizację (wystarczy jedno z nich).'),
     ).toHaveCount(2);
     await expect(page.getByText('Wybierz poprawną datę wizyty.')).toBeVisible();
-    await expect(page.getByText('Wybierz poprawną godzinę wizyty.')).toBeVisible();
+    await expect(
+      page.getByText('Wpisz godzinę wizyty w formacie GG:MM, na przykład 10:30.'),
+    ).toBeVisible();
     await expect(page.getByRole('textbox', { name: /^Miejsce/ })).toHaveValue('Gabinet 5');
     expect(await stored(page)).toEqual([]);
   });

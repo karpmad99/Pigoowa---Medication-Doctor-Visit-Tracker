@@ -4,6 +4,7 @@ import { TodayDosesPanel } from '@/features/dashboard/components/TodayDosesPanel
 import { UpcomingAppointmentsPanel } from '@/features/dashboard/components/UpcomingAppointmentsPanel';
 import { useDoseLogs } from '@/features/doses/hooks/useDoseLogs';
 import { useMedications } from '@/features/medications/hooks/useMedications';
+import { useStockEvents } from '@/features/stock/hooks/useStockEvents';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useServices } from '@/hooks/useServices';
 import { EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE } from '@/utils/date';
@@ -21,9 +22,12 @@ export function DashboardPage() {
   const today = getLocalDateInZone(clock.now(), timeZone);
   const medications = useMedications();
   const doseLogs = useDoseLogs(EARLIEST_LOCAL_DATE, LATEST_LOCAL_DATE, { keepDataOnReload: true });
+  // The stock estimate also adds the refills and subtracts the waste recorded since the count.
+  const stockEvents = useStockEvents({ keepDataOnReload: true });
   const reloadDoseData = () => {
     medications.reload();
     doseLogs.reload();
+    stockEvents.reload();
   };
 
   return (
@@ -45,7 +49,9 @@ export function DashboardPage() {
           <StockPanel
             medications={medications}
             doseLogs={doseLogs}
+            stockEvents={stockEvents}
             today={today}
+            timeZone={timeZone}
             onRetry={reloadDoseData}
           />
         </div>

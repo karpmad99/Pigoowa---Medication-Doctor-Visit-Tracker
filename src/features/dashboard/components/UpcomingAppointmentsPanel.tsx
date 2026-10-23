@@ -81,17 +81,19 @@ export function UpcomingAppointmentsPanel() {
                 return (
                   <li
                     key={appointment.id}
-                    className="rounded-card border border-line bg-surface p-4"
+                    className="rounded-card border border-line bg-canvas p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                       <div className="min-w-0">
-                        <p className="font-semibold tabular-nums">
+                        <p className="text-lg font-semibold tabular-nums">
                           {formatLocalDate(date)},{' '}
                           <time dateTime={appointment.scheduledAt}>{time}</time>
                         </p>
-                        <p className="break-words font-medium">{appointmentTitle(appointment)}</p>
+                        <p className="break-words text-lg font-medium">
+                          {appointmentTitle(appointment)}
+                        </p>
                         {appointment.doctorName !== null && appointment.specialty !== null && (
-                          <p className="break-words text-sm text-ink-muted">
+                          <p className="break-words text-base text-ink-muted">
                             {appointment.specialty}
                           </p>
                         )}
@@ -105,7 +107,7 @@ export function UpcomingAppointmentsPanel() {
           )}
 
           {selection.upcomingTotal > selection.upcoming.length && (
-            <p className="text-sm text-ink-muted">
+            <p className="text-base text-ink-muted">
               Pokazano {String(selection.upcoming.length)} z {String(selection.upcomingTotal)}{' '}
               nadchodzących wizyt.
             </p>

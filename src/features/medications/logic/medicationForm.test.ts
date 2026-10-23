@@ -14,12 +14,18 @@ const TODAY = asLocalDate('2026-10-15');
 function valid(overrides: Partial<MedicationFormValues> = {}): MedicationFormValues {
   return {
     name: 'Lek A',
+    dosageForm: '',
     doseUnit: 'tabletka',
+    strengthValue: '',
+    strengthUnit: '',
     notes: '',
     startDate: '2026-10-01',
     endDate: '',
     scheduleTimes: [{ scheduleTimeId: '', timeOfDay: '08:00', doseAmount: '1' }],
     stockQuantity: '',
+    stockUnit: '',
+    lowStockThreshold: '',
+    lowStockThresholdUnit: '',
     ...overrides,
   };
 }
@@ -31,12 +37,18 @@ describe('emptyMedicationForm', () => {
   it('starts today with one blank row, never pre-filling a time or a dose', () => {
     expect(emptyMedicationForm(TODAY)).toEqual({
       name: '',
+      dosageForm: '',
       doseUnit: '',
+      strengthValue: '',
+      strengthUnit: '',
       notes: '',
       startDate: '2026-10-15',
       endDate: '',
       scheduleTimes: [{ scheduleTimeId: '', timeOfDay: '', doseAmount: '' }],
       stockQuantity: '',
+      stockUnit: '',
+      lowStockThreshold: '',
+      lowStockThresholdUnit: '',
     });
   });
 
@@ -214,12 +226,18 @@ describe('readMedicationForm', () => {
 
     expect(fields).toEqual({
       name: 'Lek A',
+      dosageForm: null,
       doseUnit: 'tabletka',
+      doseUnitAsEntered: ' tabletka ',
+      strength: null,
       notes: 'Po jedzeniu',
       startDate: '2026-10-01',
       endDate: '2026-12-31',
       scheduleTimes: [{ scheduleTimeId: 't-1', timeOfDay: '08:00', doseAmount: 0.5 }],
       stockQuantity: 12.5,
+      stockUnit: null,
+      lowStockThreshold: null,
+      lowStockThresholdUnit: null,
     });
   });
 
@@ -256,7 +274,10 @@ describe('medicationToFormValues', () => {
   it('shows the stored values as text, rows in time order, with the Polish decimal comma', () => {
     expect(medicationToFormValues(medication)).toEqual({
       name: 'Lek A',
+      dosageForm: '',
       doseUnit: 'tabletka',
+      strengthValue: '',
+      strengthUnit: '',
       notes: 'Notatka',
       startDate: '2026-01-01',
       endDate: '2026-12-31',
@@ -265,6 +286,9 @@ describe('medicationToFormValues', () => {
         { scheduleTimeId: 't-2', timeOfDay: '20:00', doseAmount: '0,5' },
       ],
       stockQuantity: '12,5',
+      stockUnit: 'tabletka',
+      lowStockThreshold: '',
+      lowStockThresholdUnit: '',
     });
   });
 
@@ -299,5 +323,220 @@ describe('medicationToFormValues', () => {
 
     expect(values.scheduleTimes[0]?.doseAmount).toBe('12000');
     expect(validateMedicationForm(values)).toEqual([]);
+  });
+});
+
+describe('the dosage form, the strength and the stock unit in the form', () => {
+  it.each([
+    '',
+    'tablet',
+    'capsule',
+    'liquid',
+    'drops',
+    'injection',
+    'sachet',
+    'patch',
+    'suppository',
+    'inhaler',
+    'other',
+  ])('accepts the dosage form "%s"', (dosageForm) => {
+    expect(codesOf(valid({ dosageForm }))).toEqual([]);
+  });
+
+  it.each(['powder', 'Tablet', ' tablet'])('refuses the unknown dosage form "%s"', (dosageForm) => {
+    expect(codesOf(valid({ dosageForm }))).toEqual(['dosageForm:dosage-form-invalid']);
+  });
+
+  it('treats the strength as optional: both parts empty is valid and gives none', () => {
+    expect(codesOf(valid())).toEqual([]);
+    expect(readMedicationForm(valid())?.strength).toBeNull();
+  });
+
+  it('reads a strength with the Polish decimal comma', () => {
+    const values = valid({ strengthValue: '0,5', strengthUnit: 'g' });
+
+    expect(codesOf(values)).toEqual([]);
+    expect(readMedicationForm(values)?.strength).toEqual({ value: 0.5, unit: 'g' });
+  });
+
+  it.each(['mg', 'mcg', 'g', 'IU', 'mg/ml', 'mcg/ml', '%'])(
+    'accepts the strength unit "%s"',
+    (unit) => {
+      expect(codesOf(valid({ strengthValue: '5', strengthUnit: unit }))).toEqual([]);
+    },
+  );
+
+  it('requires both parts: a number without a unit, and a unit without a number', () => {
+    expect(codesOf(valid({ strengthValue: '500' }))).toEqual([
+      'strengthUnit:strength-unit-required',
+    ]);
+    expect(codesOf(valid({ strengthUnit: 'mg' }))).toEqual([
+      'strengthValue:strength-value-required',
+    ]);
+    expect(readMedicationForm(valid({ strengthValue: '500' }))).toBeNull();
+  });
+
+  it.each(['0', '0,0', '-1', 'abc', '1e3', '1,2345', '10000000', '1 000'])(
+    'refuses the strength number "%s"',
+    (strengthValue) => {
+      expect(codesOf(valid({ strengthValue, strengthUnit: 'mg' }))).toEqual([
+        'strengthValue:strength-value-invalid',
+      ]);
+    },
+  );
+
+  it('refuses a strength unit that is not on the list, including a dose unit', () => {
+    expect(codesOf(valid({ strengthValue: '5', strengthUnit: 'tabletka' }))).toEqual([
+      'strengthUnit:strength-unit-invalid',
+    ]);
+    expect(codesOf(valid({ strengthValue: '5', strengthUnit: 'ml' }))).toEqual([
+      'strengthUnit:strength-unit-invalid',
+    ]);
+  });
+
+  it('reads an untouched stock unit as typed, and an empty one as "the dose unit"', () => {
+    expect(readMedicationForm(valid({ stockUnit: '' }))?.stockUnit).toBeNull();
+    expect(readMedicationForm(valid({ stockUnit: '  ' }))?.stockUnit).toBeNull();
+    expect(readMedicationForm(valid({ stockUnit: 'Tabletka ' }))?.stockUnit).toBe('Tabletka ');
+  });
+
+  it('refuses a stock unit longer than a unit may be', () => {
+    expect(codesOf(valid({ stockUnit: 'x'.repeat(31) }))).toEqual([
+      'stockUnit:stock-unit-too-long',
+    ]);
+    expect(codesOf(valid({ stockUnit: 'x'.repeat(30) }))).toEqual([]);
+  });
+
+  it('keeps the dose unit as entered next to the trimmed one', () => {
+    const fields = readMedicationForm(valid({ doseUnit: ' Tabletka ' }));
+
+    expect(fields).toMatchObject({ doseUnit: 'Tabletka', doseUnitAsEntered: ' Tabletka ' });
+  });
+
+  it('shows a stored form, strength and units as form text, and reads them back the same', () => {
+    const medication = makeMedication({
+      dosageForm: 'liquid',
+      strength: { value: 2.5, unit: 'mg/ml' },
+      doseUnit: 'ml',
+      stock: { quantity: 120, unit: 'ml', asOf: asTimestamp('2026-09-01T08:00:00Z') },
+    });
+
+    const values = medicationToFormValues(medication);
+
+    expect(values).toMatchObject({
+      dosageForm: 'liquid',
+      strengthValue: '2,5',
+      strengthUnit: 'mg/ml',
+      doseUnit: 'ml',
+      stockQuantity: '120',
+      stockUnit: 'ml',
+    });
+    expect(validateMedicationForm(values)).toEqual([]);
+    expect(readMedicationForm(values)).toMatchObject({
+      dosageForm: 'liquid',
+      strength: { value: 2.5, unit: 'mg/ml' },
+      stockUnit: 'ml',
+    });
+  });
+
+  it('shows an older medication with an empty form and strength: nothing is assigned to it', () => {
+    const values = medicationToFormValues(makeMedication());
+
+    expect(values).toMatchObject({ dosageForm: '', strengthValue: '', strengthUnit: '' });
+    expect(readMedicationForm(values)).toMatchObject({ dosageForm: null, strength: null });
+  });
+
+  it('shows a stored unit exactly as it is stored, without trimming', () => {
+    const values = medicationToFormValues(
+      makeMedication({
+        doseUnit: 'Tabletka ',
+        stock: { quantity: 1, unit: ' Opakowanie', asOf: asTimestamp('2026-09-01T08:00:00Z') },
+      }),
+    );
+
+    expect(values.doseUnit).toBe('Tabletka ');
+    expect(values.stockUnit).toBe(' Opakowanie');
+  });
+});
+
+describe('the own low-stock threshold in the form', () => {
+  const withStock = (overrides: Partial<MedicationFormValues> = {}) =>
+    valid({ stockQuantity: '28', ...overrides });
+
+  it('is optional: empty is valid and gives none', () => {
+    expect(codesOf(withStock())).toEqual([]);
+    expect(readMedicationForm(withStock())).toMatchObject({
+      lowStockThreshold: null,
+      lowStockThresholdUnit: null,
+    });
+  });
+
+  it.each([
+    ['5', 5],
+    ['0', 0],
+    ['0,5', 0.5],
+    ['12.25', 12.25],
+    [' 7 ', 7],
+    ['9999999,999', 9_999_999.999],
+  ])('reads the threshold "%s" as %s (zero is allowed)', (text, number) => {
+    const values = withStock({ lowStockThreshold: text });
+
+    expect(codesOf(values)).toEqual([]);
+    expect(readMedicationForm(values)?.lowStockThreshold).toBe(number);
+  });
+
+  it.each(['-1', 'abc', '1e3', '1,2345', '10000000', '1 000', ',5'])(
+    'refuses the threshold "%s"',
+    (text) => {
+      expect(codesOf(withStock({ lowStockThreshold: text }))).toEqual([
+        'lowStockThreshold:threshold-invalid',
+      ]);
+      expect(readMedicationForm(withStock({ lowStockThreshold: text }))).toBeNull();
+    },
+  );
+
+  it('needs a stock to be about: with no stock quantity it is refused', () => {
+    expect(codesOf(valid({ lowStockThreshold: '5' }))).toEqual([
+      'lowStockThreshold:threshold-needs-stock',
+    ]);
+    expect(codesOf(valid({ lowStockThreshold: '5', stockQuantity: '0' }))).toEqual([]);
+  });
+
+  it('keeps the unit of a stored threshold, empty meaning "the stock unit"', () => {
+    expect(
+      readMedicationForm(withStock({ lowStockThreshold: '5', lowStockThresholdUnit: 'ml' }))
+        ?.lowStockThresholdUnit,
+    ).toBe('ml');
+    expect(
+      readMedicationForm(withStock({ lowStockThreshold: '5', lowStockThresholdUnit: '' }))
+        ?.lowStockThresholdUnit,
+    ).toBeNull();
+  });
+
+  it('shows a stored threshold as text with its unit, and reads it back the same', () => {
+    const medication = makeMedication({
+      stock: { quantity: 28, unit: 'tabletka', asOf: asTimestamp('2026-09-01T08:00:00Z') },
+      lowStockThreshold: { quantity: 4.5, unit: 'tabletka' },
+    });
+
+    const values = medicationToFormValues(medication);
+
+    expect(values).toMatchObject({ lowStockThreshold: '4,5', lowStockThresholdUnit: 'tabletka' });
+    expect(validateMedicationForm(values)).toEqual([]);
+    expect(readMedicationForm(values)).toMatchObject({
+      lowStockThreshold: 4.5,
+      lowStockThresholdUnit: 'tabletka',
+    });
+  });
+
+  it('shows an older medication with no threshold as empty, and a null one the same', () => {
+    expect(medicationToFormValues(makeMedication())).toMatchObject({
+      lowStockThreshold: '',
+      lowStockThresholdUnit: '',
+    });
+    expect(medicationToFormValues(makeMedication({ lowStockThreshold: null }))).toMatchObject({
+      lowStockThreshold: '',
+      lowStockThresholdUnit: '',
+    });
   });
 });

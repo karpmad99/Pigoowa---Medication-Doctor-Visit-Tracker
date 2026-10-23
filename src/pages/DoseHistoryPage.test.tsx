@@ -560,7 +560,7 @@ describe('history: deleting a record outside the current schedule', () => {
     services.storage.data.set(
       STORAGE_KEYS.doseLogs,
       JSON.stringify({
-        version: 1,
+        version: 2,
         items: [
           makeDoseLog({ id: 'orphan', medicationId: 'm-gone', scheduledDate: d('2026-10-05') }),
         ],

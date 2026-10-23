@@ -31,3 +31,20 @@ export function createBrowserStorage(): KeyValueStorage {
     },
   };
 }
+
+/**
+ * The browser's `sessionStorage`: kept for this tab only and forgotten when it is closed. Used for the one
+ * choice that must survive a reload but not a new visit (the demonstration chosen on the sign-in page). Looked
+ * up on every call, for the same reason as above.
+ */
+export function createTabStorage(): KeyValueStorage {
+  return {
+    getItem: (key) => window.sessionStorage.getItem(key),
+    setItem: (key, value) => {
+      window.sessionStorage.setItem(key, value);
+    },
+    removeItem: (key) => {
+      window.sessionStorage.removeItem(key);
+    },
+  };
+}

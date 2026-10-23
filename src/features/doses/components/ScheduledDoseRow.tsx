@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Icon } from '@/components/ui/Icon';
 import { formatAmount } from '@/features/medications/logic/unitForms';
+import { cx } from '@/utils/cx';
 import { formatTimestamp } from '@/utils/format';
 import type { DoseTarget } from '../applyDoseAction';
 import type { PendingDoseAction } from '../hooks/useDoseActions';
@@ -30,6 +32,17 @@ interface ScheduledDoseRowProps {
   timeZone: string;
   focusRequest: FocusRequest | null;
   onAction: (dose: ScheduledDose, target: DoseTarget) => void;
+  /**
+   * Opens the dialog for the amount actually taken and the note: for a dose with no record (it is
+   * then recorded as taken with that amount) and for a taken one (to edit them). Not for a
+   * skipped dose, which has neither.
+   */
+  onDetails?: (dose: ScheduledDose) => void;
+  /**
+   * True for the one dose the dashboard points at (`selectNextUnrecordedDose`). Presentation only:
+   * it adds a label and a stronger frame and changes nothing about the dose or its actions.
+   */
+  isNext?: boolean;
 }
 
 /**
@@ -37,7 +50,12 @@ interface ScheduledDoseRowProps {
  * actions that fit that status.
  * - Unrecorded: mark as taken / skipped.
  * - Recorded: change it to the other status, or clear the record.
+ * - Taken with an amount other than planned: both are shown, the plan and what was taken, with the
+ *   note. The message about the schedule having changed since ("obecnie w harmonogramie") keeps
+ *   its own meaning and is never used for "taken differently".
  * Every button's accessible name says which dose it is for.
+ * `isNext` marks the dose to deal with first. The mark is written out ("Następna dawka bez zapisu"),
+ * never colour alone, and says nothing about the time: it is not "late" or "missed".
  */
 export function ScheduledDoseRow({
   dose,
@@ -47,6 +65,8 @@ export function ScheduledDoseRow({
   timeZone,
   focusRequest,
   onAction,
+  onDetails,
+  isNext = false,
 }: ScheduledDoseRowProps) {
   const statusRef = useRef<HTMLParagraphElement>(null);
   const slotKey = doseSlotKey(dose);
@@ -74,19 +94,44 @@ export function ScheduledDoseRow({
     </Button>
   );
 
+  const detailsButton = (text: string, name: string) => (
+    <Button
+      variant="secondary"
+      disabled={isBusy}
+      isLoading={pending?.slotKey === slotKey && pending.target === 'details'}
+      aria-label={`${name}: ${context}`}
+      onClick={() => {
+        onDetails?.(dose);
+      }}
+    >
+      {text}
+    </Button>
+  );
+
   const log = dose.log;
   const recordedAmount = log === null ? null : formatAmount(log.doseAmount, log.doseUnit);
   const plannedAmount = formatAmount(dose.doseAmount, dose.doseUnit);
 
   return (
-    <li className="rounded-card border border-line bg-surface p-4">
+    <li
+      className={cx(
+        'rounded-card border p-4',
+        isNext ? 'border-brand-700 bg-brand-50 ring-2 ring-brand-700' : 'border-line bg-canvas',
+      )}
+    >
+      {isNext && (
+        <p className="mb-2 flex items-center gap-2 text-base font-semibold text-brand-700">
+          <Icon name="arrow-right" />
+          Następna dawka bez zapisu
+        </p>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <p className="text-xl font-semibold tabular-nums">
+          <p className="text-3xl font-bold tabular-nums">
             <time dateTime={dose.time}>{dose.time}</time>
           </p>
-          <p className="break-words font-medium">{dose.medicationName}</p>
-          <p className="text-ink-muted">{plannedAmount}</p>
+          <p className="break-words text-lg font-semibold">{dose.medicationName}</p>
+          <p className="text-lg text-ink-muted">{plannedAmount}</p>
         </div>
         <p
           ref={statusRef}
@@ -99,9 +144,9 @@ export function ScheduledDoseRow({
       </div>
 
       {log !== null && (
-        <p className="mt-2 text-sm text-ink-muted">
+        <p className="mt-2 text-base text-ink-muted">
           {doseStatusLabel(log.status)}, zapisano {formatTimestamp(log.recordedAt, timeZone)}.
-          {recordedAmount !== plannedAmount && (
+          {log.takenAmount === undefined && recordedAmount !== plannedAmount && (
             <>
               {' '}
               Zapisana dawka: {recordedAmount} (obecnie w harmonogramie: {plannedAmount}).
@@ -109,17 +154,33 @@ export function ScheduledDoseRow({
           )}
         </p>
       )}
+      {log !== null && log.status === 'taken' && log.takenAmount !== undefined && (
+        <p className="mt-2 text-base">
+          <strong>Przyjęto: {formatAmount(log.takenAmount, log.doseUnit)}.</strong> Planowano wtedy:{' '}
+          {recordedAmount}.
+          {recordedAmount !== plannedAmount && <> Obecnie w harmonogramie: {plannedAmount}.</>}
+        </p>
+      )}
+      {log !== null && log.status === 'taken' && log.note != null && (
+        <p className="mt-2 whitespace-pre-line break-words text-base">
+          <span className="font-semibold">Notatka: </span>
+          {log.note}
+        </p>
+      )}
 
       {dose.status === 'unrecorded' && canRecord && (
         <div className="mt-4 grid gap-2 sm:flex">
           {button('taken', 'Oznacz jako przyjętą', 'primary')}
           {button('skipped', 'Oznacz jako pominiętą', 'secondary')}
+          {onDetails !== undefined && detailsButton('Przyjęto inną ilość…', 'Przyjęto inną ilość')}
         </div>
       )}
       {dose.status === 'taken' && (
         <div className="mt-4 grid gap-2 sm:flex">
           {canRecord && button('skipped', 'Zmień na pominiętą', 'secondary')}
           {button('clear', 'Cofnij zapis', 'secondary')}
+          {onDetails !== undefined &&
+            detailsButton('Zmień ilość lub notatkę', 'Zmień ilość lub notatkę')}
         </div>
       )}
       {dose.status === 'skipped' && (

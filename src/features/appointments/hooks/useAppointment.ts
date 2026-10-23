@@ -7,5 +7,5 @@ import type { Id } from '@/types/primitives';
 export function useAppointment(id: Id) {
   const { repositories } = useServices();
   const load = useCallback(() => repositories.appointments.get(id), [repositories, id]);
-  return useAsyncData(load);
+  return useAsyncData(['appointment', id], load);
 }

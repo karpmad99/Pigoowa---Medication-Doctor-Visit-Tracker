@@ -15,7 +15,7 @@ export function appointmentIssueMessage(issue: AppointmentIssue): string {
     case 'invalid-date':
       return 'Wybierz poprawną datę wizyty.';
     case 'invalid-time':
-      return 'Wybierz poprawną godzinę wizyty.';
+      return 'Wpisz godzinę wizyty w formacie GG:MM, na przykład 10:30.';
     case 'nonexistent-time':
       return 'Tej godziny nie ma w wybranym dniu z powodu zmiany czasu. Wybierz inną godzinę.';
     case 'too-long':

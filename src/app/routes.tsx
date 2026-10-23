@@ -9,6 +9,7 @@ import { DoseHistoryPage } from '@/pages/DoseHistoryPage';
 import { DosesPage } from '@/pages/DosesPage';
 import { EditAppointmentPage } from '@/pages/EditAppointmentPage';
 import { EditMedicationPage } from '@/pages/EditMedicationPage';
+import { MedicationDetailsPage } from '@/pages/MedicationDetailsPage';
 import { MedicationsPage } from '@/pages/MedicationsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
@@ -33,25 +34,30 @@ const developmentRoutes: RouteObject[] = import.meta.env.DEV
     ]
   : [];
 
+// The pages of the application, the same in every build.
+export const applicationPages: RouteObject[] = [
+  { index: true, element: <DashboardPage /> },
+  { path: 'doses', element: <DosesPage /> },
+  { path: 'doses/history', element: <DoseHistoryPage /> },
+  { path: 'medications', element: <MedicationsPage /> },
+  { path: 'medications/new', element: <AddMedicationPage /> },
+  { path: 'medications/:medicationId', element: <MedicationDetailsPage /> },
+  { path: 'medications/:medicationId/edit', element: <EditMedicationPage /> },
+  { path: 'appointments', element: <AppointmentsPage /> },
+  { path: 'appointments/new', element: <AddAppointmentPage /> },
+  { path: 'appointments/:appointmentId/edit', element: <EditAppointmentPage /> },
+  ...developmentRoutes,
+  { path: '*', element: <NotFoundPage /> },
+];
+
 // Kept as plain data (not created here) so tests can build an in-memory router from it.
+// The build WITHOUT accounts (the public demonstration): the services are given from outside (src/main.tsx).
 export const routes: RouteObject[] = [
   {
     path: '/',
     element: <AppShell />,
     // Shown only while a lazily loaded route (the development preview) is still downloading.
     HydrateFallback: () => <Spinner />,
-    children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'doses', element: <DosesPage /> },
-      { path: 'doses/history', element: <DoseHistoryPage /> },
-      { path: 'medications', element: <MedicationsPage /> },
-      { path: 'medications/new', element: <AddMedicationPage /> },
-      { path: 'medications/:medicationId/edit', element: <EditMedicationPage /> },
-      { path: 'appointments', element: <AppointmentsPage /> },
-      { path: 'appointments/new', element: <AddAppointmentPage /> },
-      { path: 'appointments/:appointmentId/edit', element: <EditAppointmentPage /> },
-      ...developmentRoutes,
-      { path: '*', element: <NotFoundPage /> },
-    ],
+    children: applicationPages,
   },
 ];

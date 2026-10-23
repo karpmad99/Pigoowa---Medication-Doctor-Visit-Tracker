@@ -1,6 +1,6 @@
 import type { Id, LocalDate, Timestamp } from '@/types/primitives';
 import { compareLocalDates } from '@/utils/date';
-import type { Medication, MedicationStock, ScheduleTime } from '../types';
+import type { LowStockThreshold, Medication, MedicationStock, ScheduleTime } from '../types';
 import type { MedicationFormFields } from './medicationForm';
 import { applyScheduleChange } from './schedule';
 import { buildMedicationStock } from './stock';
@@ -31,16 +31,52 @@ function stockOf(
   now: Timestamp,
 ): { ok: true; stock: MedicationStock | null } | { ok: false } {
   if (fields.stockQuantity === null) return { ok: true, stock: null };
-  // The quantity was not touched: keep the stored stock exactly as it was, including WHEN it was
-  // counted (`asOf`). Resetting that moment would change which taken doses count against it.
-  if (previous !== null && previous.quantity === fields.stockQuantity) {
+  // The quantity and the unit were not touched: keep the stored stock exactly as it was, including
+  // WHEN it was counted (`asOf`). Resetting that moment would change which taken doses count against it.
+  // The same goes for the unit: an unchanged stored unit is kept byte for byte. A stock counted in
+  // another unit than the dose unit is allowed (the estimate is then unavailable); it is never
+  // converted or replaced.
+  const unit = fields.stockUnit ?? fields.doseUnit;
+  if (previous !== null && previous.quantity === fields.stockQuantity && previous.unit === unit) {
     return { ok: true, stock: previous };
   }
-  const built = buildMedicationStock(
-    { quantity: fields.stockQuantity, unit: fields.doseUnit },
-    now,
-  );
+  const built = buildMedicationStock({ quantity: fields.stockQuantity, unit }, now);
   return built.ok ? { ok: true, stock: built.stock } : { ok: false };
+}
+
+/**
+ * The optional fields of the form that were given. A field that was not given is absent, never
+ * `null` or a default: an older medication saved without a form or a strength stays without them
+ * unless the person chooses them.
+ */
+function optionalDetails(
+  fields: MedicationFormFields,
+  previousThreshold: LowStockThreshold | null | undefined,
+  stock: MedicationStock | null,
+): Pick<Medication, 'dosageForm' | 'strength' | 'lowStockThreshold'> {
+  const threshold = thresholdOf(fields, previousThreshold, stock);
+  return {
+    ...(fields.dosageForm === null ? {} : { dosageForm: fields.dosageForm }),
+    ...(fields.strength === null ? {} : { strength: fields.strength }),
+    ...(threshold === null ? {} : { lowStockThreshold: threshold }),
+  };
+}
+
+/**
+ * The own low-stock threshold as it should be stored. It is a quantity in a unit, and the unit is
+ * stored with it: a threshold typed now is in the unit the stock is saved in; a stored one keeps
+ * its own unit until the person chooses to count it in the stock unit. An unchanged threshold is
+ * kept as the same object. Without a stock there is nothing for a threshold to be about.
+ */
+function thresholdOf(
+  fields: MedicationFormFields,
+  previous: LowStockThreshold | null | undefined,
+  stock: MedicationStock | null,
+): LowStockThreshold | null {
+  if (fields.lowStockThreshold === null || stock === null) return null;
+  const unit = fields.lowStockThresholdUnit ?? stock.unit;
+  if (previous?.quantity === fields.lowStockThreshold && previous.unit === unit) return previous;
+  return { quantity: fields.lowStockThreshold, unit };
 }
 
 /** A new medication from a validated form. The schedule takes effect from the start date. */
@@ -56,6 +92,7 @@ export function createMedicationFromForm(
       id: context.id,
       name: fields.name,
       doseUnit: fields.doseUnit,
+      ...optionalDetails(fields, undefined, stock.stock),
       notes: fields.notes,
       startDate: fields.startDate,
       endDate: fields.endDate,
@@ -96,10 +133,17 @@ export function applyMedicationEdit(
         : effectiveFrom;
   }
 
+  // `dosageForm` and `strength` are replaced by what the form says, so clearing one removes it.
+  const withoutOptional: Medication = { ...existing };
+  delete withoutOptional.dosageForm;
+  delete withoutOptional.strength;
+  delete withoutOptional.lowStockThreshold;
   const withNewDetails: Medication = {
-    ...existing,
+    ...withoutOptional,
     name: fields.name,
-    doseUnit: fields.doseUnit,
+    // Untouched means the text the form was opened with: then the stored text stays exactly as it was.
+    doseUnit: fields.doseUnitAsEntered === existing.doseUnit ? existing.doseUnit : fields.doseUnit,
+    ...optionalDetails(fields, existing.lowStockThreshold, stock.stock),
     notes: fields.notes,
     startDate: fields.startDate,
     endDate: fields.endDate,

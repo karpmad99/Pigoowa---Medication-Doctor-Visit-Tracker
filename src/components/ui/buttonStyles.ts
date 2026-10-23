@@ -4,7 +4,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerOutline'
 export type ButtonSize = 'md' | 'sm';
 
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-control px-4 text-sm font-semibold ' +
+  'inline-flex items-center justify-center gap-2 rounded-control px-4 text-base font-semibold ' +
   'transition-colors disabled:cursor-not-allowed disabled:opacity-60';
 
 const variants: Record<ButtonVariant, string> = {
@@ -16,11 +16,11 @@ const variants: Record<ButtonVariant, string> = {
   ghost: 'text-brand-700 hover:bg-brand-50',
 };
 
-// "md" is 44 px tall: a comfortable touch target on phones. "sm" is compact (36 px) only where a
+// "md" is 48 px tall: a large touch target on phones, easy to hit for older users. "sm" is compact (36 px) only where a
 // mouse is the likely pointer (from the tablet width up and not on a touch screen); on a phone it is
 // 44 px too, so no button is hard to hit.
 const sizes: Record<ButtonSize, string> = {
-  md: 'min-h-11',
+  md: 'min-h-12',
   sm: 'min-h-11 px-3 md:min-h-9 md:pointer-coarse:min-h-11',
 };
 

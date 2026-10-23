@@ -1,3 +1,5 @@
+import { useAppMode } from '@/app/appMode';
+import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 
 /**
@@ -8,6 +10,8 @@ import { Icon } from '@/components/ui/Icon';
  */
 // A named <section> is a landmark ("region"), so the notice is not content outside every landmark.
 export function DemoBanner() {
+  const mode = useAppMode();
+  const leaveDemo = mode.kind === 'demo' ? mode.leaveDemo : null;
   return (
     <section
       aria-label="Informacja o wersji demonstracyjnej"
@@ -21,6 +25,13 @@ export function DemoBanner() {
           ani osobowych.
         </span>
       </p>
+      {leaveDemo !== null && (
+        <div className="mx-auto mt-2 max-w-4xl">
+          <Button variant="secondary" size="sm" onClick={leaveDemo}>
+            Wyjdź z wersji demonstracyjnej i zaloguj się
+          </Button>
+        </div>
+      )}
     </section>
   );
 }

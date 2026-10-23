@@ -5,7 +5,16 @@ import { cx } from '@/utils/cx';
 // the visible text next to them carries the meaning, so they are hidden from screen readers.
 
 export type IconName =
-  'dashboard' | 'pill' | 'calendar' | 'check' | 'alert' | 'info' | 'close' | 'minus' | 'clock';
+  | 'dashboard'
+  | 'pill'
+  | 'calendar'
+  | 'check'
+  | 'alert'
+  | 'info'
+  | 'close'
+  | 'minus'
+  | 'clock'
+  | 'arrow-right';
 
 const shapes: Record<IconName, ReactNode> = {
   dashboard: (
@@ -42,6 +51,7 @@ const shapes: Record<IconName, ReactNode> = {
     </>
   ),
   close: <path d="M6 6l12 12M18 6L6 18" />,
+  'arrow-right': <path d="M5 12h14M13 6l6 6-6 6" />,
   minus: <path d="M5 12h14" />,
   clock: (
     <>

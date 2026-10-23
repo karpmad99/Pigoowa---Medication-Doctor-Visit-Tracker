@@ -4,6 +4,7 @@ import { createId } from '@/utils/id';
 import type { AppServices } from '../repositories';
 import { createLocalDemoData } from './localDemoData';
 import { createLocalRepositories } from './localRepositories';
+import { createStorageMigration } from './migration';
 import { createBrowserStorage, type KeyValueStorage } from './storage';
 
 export interface LocalServicesOptions {
@@ -28,5 +29,7 @@ export function createLocalServices(options: LocalServicesOptions = {}): AppServ
     createId: options.createId ?? createId,
     repositories: createLocalRepositories(storage),
     demoData: createLocalDemoData({ storage, clock, timeZone }),
+    // Not run here: the application runs it once, before it renders (src/main.tsx).
+    storageMigration: createStorageMigration(storage, clock),
   };
 }

@@ -4,7 +4,7 @@
 
 **Live demo: <https://pigoowa-medication-doctor-visit-tra.vercel.app/>**: fictional data only. Everything you enter is kept in your own browser (`localStorage`), unencrypted, so use invented data and never real medical or personal data. See [Deployment](#deployment).
 
-> **Project status: Stage 9 of 12 is nearly complete: tests, accessibility fixes, the demo notice and the hosting configuration are done and the public demo is deployed (see [Deployment](#deployment)); a manual check of the live demo on a phone is still open, so the MVP is not yet declared complete. Stages 1–8: scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard.** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Project status: Stages 1–9 are complete; Stage 10 (the Supabase schema and Row Level Security) and Stage 11 (accounts and Supabase persistence) are implemented and verified on a LOCAL Supabase stack only (see [Accounts and the local Supabase stack](#accounts-and-the-local-supabase-stack)): no hosted project exists, and a manual two-account check by the owner is still open. The public demo is unchanged. The MVP is a demo with fictional data kept in the browser, tested end to end and deployed (see [Deployment](#deployment)); the owner checked it on a phone. Stages 1–8 were: scaffold, domain logic, design foundation, data layer, medication management, daily doses and history, doctor appointments, dashboard; stage 9: end-to-end tests, accessibility, demo deployment. A medication feature track (F0–F8, see the roadmap) comes before the database stages: F0 (decisions) and F1 (the storage format migration) are done, F2 (a time field that can be typed) is implemented and awaits a check on real phones, F3 (larger, clearer cards and the pointer to the next dose without a record) is implemented, F4 (dosage form, unit lists and an informational strength) is implemented, F5 (a medication details page and an own low-stock threshold) is implemented, F6 (stock events, a refill action and starting to track the stock) is implemented, F7 (recording wasted medicine, which lowers the estimate and is not a dose) is implemented, F8 (the amount actually taken, with a note, beside the plan) is implemented: the F-track is complete.** The app is a responsive, accessible Polish-language shell (sidebar on desktop, bottom bar on phones). **Pulpit (Dashboard), Leki (Medications), Dawki (Doses) and Wizyty (Appointments) work**: you can add, edit, end and permanently delete medications, mark each day's doses as taken or skipped (and undo that), browse and filter the intake history, see an explained stock estimate, and keep a list of upcoming and past doctor appointments; data is kept in the browser's `localStorage` (fictional/demo data only, see the notice below). All four sections are real screens. Reminders and alarms do not exist (a future requirement, see [docs/ROADMAP.md](docs/ROADMAP.md)). Sections marked *(planned)* describe intended behaviour, not existing functionality. Progress is tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Important notice
 
@@ -33,10 +33,11 @@ Installed now (versions as resolved by `package-lock.json`):
 | End-to-end tests | @playwright/test | 1.64.1 |
 | Accessibility checks in the browser | @axe-core/playwright (dev dependency, MPL-2.0) | 4.14.0 |
 | Forms and validation | react-hook-form, zod, @hookform/resolvers | 7.90.0, 4.6.7, 5.9.1 |
+| Accounts and database (Stage 11) | @supabase/supabase-js (public key only), @tanstack/react-query | 2.118.0, 5.104.5 |
 | Linting | eslint, typescript-eslint, react-hooks, jsx-a11y, react-refresh plugins | 9.39.5, 8.71.2, 7.1.1, 6.10.2, 0.5.7 |
 | Formatting | prettier | 3.9.10 |
 
-Planned for later stages: Supabase (stages 10–11), TanStack Query (stage 11). Hosting for the demo: Vercel (deployed, see [Deployment](#deployment)).
+The Supabase CLI and Docker are needed only for the local database and its tests (not installed by `npm install`). Hosting for the demo: Vercel (deployed, see [Deployment](#deployment)).
 
 Notes on version choices: ESLint is on the 9.x line because `eslint-plugin-jsx-a11y` does not yet support ESLint 10; TypeScript is on 6.0.x because `typescript-eslint` supports `<6.1`; React Router is on 7.x (stable, Node >= 20) rather than 8.x (requires Node >= 22.22).
 
@@ -57,7 +58,7 @@ npm install
 npm run dev        # start the dev server at http://localhost:5173
 ```
 
-No environment variables are needed yet.
+No environment variables are needed for the demonstration. The two public variables of the build with accounts are in `.env.example` (see [Accounts and the local Supabase stack](#accounts-and-the-local-supabase-stack)).
 
 ### Scripts
 
@@ -72,6 +73,10 @@ No environment variables are needed yet.
 | `npm test` / `npm run test:watch` | Vitest unit and component tests (once / watch mode) |
 | `npm run e2e` | Playwright end-to-end tests against the dev server (starts it itself) |
 | `npm run e2e:preview` | Playwright checks of the **production build** served as a static site (builds first) |
+| `npm run test:db-client` | Integration tests against the **local Supabase stack** (must be running): the repository contract, two-account isolation, the Auth server's error answers |
+| `npm run e2e:accounts` | Playwright tests of the build **with accounts**, against the local stack |
+| `npm run check:account-bundle` | Builds with the public variables of the local stack and checks that the only key in the bundle is the public one |
+| `npm run db:types` | Regenerates `src/services/supabase/database.types.ts` from the local database |
 | `npm run screenshots` | Regenerates `docs/screenshots` from the fictional demo data (not a test run) |
 
 ### Running end-to-end tests
@@ -86,6 +91,30 @@ The tests use a fixed clock (`2026-10-15T10:00:00Z`, time zone `Europe/Warsaw`) 
 - `e2e-preview/`: the production build only (see Deployment).
 
 Automated checks do not replace a manual accessibility review with a screen reader; none was done with real assistive technology.
+
+### Accounts and the local Supabase stack
+
+The application is built in one of two ways, decided by two **public** variables (`.env.example`; copy it to `.env.local`):
+
+- **Neither set (the default, and what the public demo is):** the demonstration. Fictional data in the browser, no sign-in.
+- **Both set:** accounts. Sign up / sign in / sign out, protected pages, and every user's data in her own Supabase account, protected by Row Level Security. The demonstration is one click away on the sign-in page and never mixes with an account. Data kept in the browser by the demonstration is **not** imported into an account and is not touched by one.
+
+Never put a secret key (`service_role`, `sb_secret_…`) in these variables: they are copied into the JavaScript every visitor downloads. The application refuses to start or build with one.
+
+To run it against a local database (needs Docker and the Supabase CLI: `npm i -g supabase`, Homebrew or Scoop):
+
+```bash
+supabase start            # first start pulls the images; applies supabase/migrations
+supabase status           # shows the API URL and the "Publishable" (anon) key
+cp .env.example .env.local   # then set VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=<that key>
+npm run dev               # http://localhost:5173 now starts with the sign-in page
+supabase test db          # pgTAP tests of the schema and Row Level Security
+npm run test:db-client    # repository contract + two-account isolation + Auth errors, against the stack
+npm run e2e:accounts      # browser tests of the build with accounts (reads the same URL and key itself)
+supabase stop             # stops the containers, keeps the data; `supabase db reset` recreates it empty
+```
+
+Details, what was verified and what was not: [docs/DATABASE.md](docs/DATABASE.md) §7 and §10. Nothing here touches a hosted Supabase project, and none exists.
 
 ### Data layer and demo data
 
@@ -104,12 +133,13 @@ The data layer sits behind interfaces (`src/services/repositories.ts`) so that t
 | Data hooks | `useMedications`, `useMedication(id)`, `useDoseLogs`, `useAppointments` in `src/features/*/hooks/` |
 | Write helpers | `useAsyncAction` (`src/hooks/`): one write at a time, unmount-safe, reports success/failure; `useDoseActions` and `applyDoseAction` (`src/features/doses/`): record, change and clear doses |
 
-**Storage keys and format.** One key per kind of record, each holding `{ "version": 1, "items": [ ... ] }`:
+**Storage keys and format.** One key per kind of record, each holding `{ "version": 2, "items": [ ... ] }`:
 
-- `pigoowa:v1:medications`, `pigoowa:v1:dose-logs`, `pigoowa:v1:appointments`
+- `pigoowa:v1:medications`, `pigoowa:v1:dose-logs`, `pigoowa:v1:appointments`, `pigoowa:v1:stock-events`
 - `pigoowa:v1:backup`: the previous contents saved by a demo-data reset (one slot, only the latest)
+- `pigoowa:v1:migration-backup:<collection>` and `pigoowa:v1:migration-backup:meta`: the verbatim backup of each collection made by the storage migration, and a small record of when and how it was made (never deleted by the application)
 
-Data with a different version is refused rather than guessed at. There are no migrations, because there is nothing to migrate yet.
+Data with an unknown version is refused rather than guessed at. Data stored by earlier versions (format version 1) is brought up to date **once, when the application starts**: each collection is first copied verbatim to its own backup key and checked against a SHA-256 fingerprint, then rewritten as version 2 with the same records; units are never changed. A collection that is still version 1 can be read but not written until it is migrated, and if it cannot be migrated (for example there is no room in the browser for the backup) the application says so and offers a retry. The migration is resumable but **not atomic**, and an older copy of the application open in another tab or deployed earlier cannot read version 2 data (it refuses it and writes nothing). The design, its guarantees and its limits are in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) §10.5.
 
 **Errors and corrupt data.** Everything read from storage is validated field by field. Invalid JSON, wrong shapes, missing fields, duplicate ids and the like produce a `RepositoryError` (for example `data-corrupted`) and the operation stops: damaged data is never treated as an empty database and never overwritten. Unreachable storage and full storage are reported as `storage-unavailable` and `storage-full`. Error messages are in Polish and never contain stored values, and the code never logs to the console. Details and the complete list of error codes are in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md) §10.4.
 
@@ -184,7 +214,9 @@ src/app/                 Route definitions
 src/components/ui/       Design-system components (Button, FormField, Dialog, ...)
 src/components/layout/   Application shell, page header, safety note
 src/hooks/               Shared React hooks (page title, services, async data)
-src/services/            Data layer: repository interfaces, browser-storage implementation, demo data
+src/services/            Data layer: repository interfaces, browser-storage implementation (local/), Supabase implementation (supabase/), demo data
+src/features/auth/       Sign-in state, authentication service, profile, sign-in forms (Stage 11)
+src/lib/                 Build configuration: the two public variables and the public-key check
 src/pages/               One thin component per route
 src/index.css            Design tokens (colours, fonts, radii)
 src/features/            Domain types, pure business logic, hooks and (for medications) form
@@ -195,6 +227,9 @@ src/utils/               Date, time-zone, quantity, clock, id and formatting hel
 src/test/                Test setup and fixtures
 e2e/                     Playwright tests (dev server)
 e2e-preview/             Playwright checks of the production build
+e2e-accounts/            Playwright tests of the build with accounts (need the local stack)
+supabase/                Migrations, pgTAP tests, integration tests (supabase/tests/client), config of the LOCAL stack
+scripts/db/              Helpers for the local stack and the database tests
 screenshots/             Generator of the README images (fictional data)
 public/                  Static files (favicon)
 vercel.json              Static hosting configuration (SPA rewrite, headers)
@@ -218,7 +253,7 @@ What is verified locally:
 
 Checked **by hand by the project owner on the live demo** (not by an automated test, and not repeated by the assistant): the dashboard opens and shows the demo notice; `/medications`, `/doses` and `/appointments` open directly and survive a reload; a fictional medication is saved and is still there after a reload; the security response headers were inspected in the browser's developer tools and with `curl`; `/dev/data` does not offer the development panel.
 
-**Not yet checked on the live demo:** use on a phone, the browser console and network requests on the live site, the other routes (`/doses/history`, `/medications/new`, `/appointments/new`, the in-app "not found" page, `/dev/components`), and a screen reader. There is also no Content-Security-Policy, and GitHub Actions has not been observed running (the workflow starts on pushes to `main` and on pull requests, and this repository currently has only the working branch).
+The owner also reported that the application works well on a phone. **Not checked on the live demo:** the browser console and network requests on the live site, the other routes (`/doses/history`, `/medications/new`, `/appointments/new`, the in-app "not found" page, `/dev/components`), and a screen reader. There is also no Content-Security-Policy, and GitHub Actions has not been observed running (the workflow starts on pushes to `main` and on pull requests, and this repository currently has only the working branch).
 
 **The demo notice.** Every page shows a notice that the data is fictional, is stored only in this browser (`localStorage`), is not encrypted, and that real medical or personal data must not be entered. The notice cannot be dismissed.
 

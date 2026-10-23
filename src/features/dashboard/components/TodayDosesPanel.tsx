@@ -6,6 +6,7 @@ import { DoseFeedbackMessage } from '@/features/doses/components/DoseFeedbackMes
 import { ScheduledDoseRow } from '@/features/doses/components/ScheduledDoseRow';
 import { useDoseListActions } from '@/features/doses/hooks/useDoseListActions';
 import { summarizeDay } from '@/features/doses/logic/daySummary';
+import { selectNextUnrecordedDose } from '@/features/doses/logic/nextDose';
 import { generateScheduledDoses } from '@/features/doses/logic/scheduledDoses';
 import { doseSlotKey } from '@/features/doses/logic/slots';
 import type { DoseLog } from '@/features/doses/types';
@@ -28,6 +29,8 @@ interface TodayDosesPanelProps {
  * Today's doses, from the same logic and the same rows as the day view (`generateScheduledDoses`,
  * `ScheduledDoseRow`, the same write path), with the counts of taken, skipped and unrecorded
  * doses. Counts only: no percentage and no score. A dose with no record stays "Nie zapisano".
+ * The first dose without a record is framed and labelled (`selectNextUnrecordedDose`), whatever
+ * the time of day: it is a pointer to the next thing to do, not a claim that anything is late.
  */
 export function TodayDosesPanel({
   medications,
@@ -47,6 +50,7 @@ export function TodayDosesPanel({
       ? null
       : generateScheduledDoses({ medications: medicationList, doseLogs: logList, date: today });
   const summary = day === null ? null : summarizeDay(day.doses);
+  const nextDose = day === null ? null : selectNextUnrecordedDose(day.doses);
 
   return (
     <DashboardPanel title="Dzisiejsze dawki" description={formatLocalDate(today)}>
@@ -85,11 +89,12 @@ export function TodayDosesPanel({
           ) : (
             <>
               {summary !== null && (
-                <p className="text-sm text-ink-muted">
+                <p className="text-base text-ink-muted">
                   Przyjęte: {String(summary.taken)}. Pominięte: {String(summary.skipped)}. Bez
                   zapisu: {String(summary.unrecorded)}. Razem dziś: {String(summary.total)}.
                 </p>
               )}
+              {actions.dialogs}
               <DoseFeedbackMessage
                 feedback={actions.feedback}
                 onDismiss={actions.dismissFeedback}
@@ -105,6 +110,8 @@ export function TodayDosesPanel({
                     timeZone={timeZone}
                     focusRequest={actions.focusRequest}
                     onAction={actions.handleAction}
+                    onDetails={actions.openDetails}
+                    isNext={nextDose !== null && doseSlotKey(nextDose) === doseSlotKey(dose)}
                   />
                 ))}
               </ul>
