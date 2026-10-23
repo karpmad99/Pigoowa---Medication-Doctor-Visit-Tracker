@@ -51,7 +51,7 @@ const TABLES = [
 
 function checkList(constraint: string): string[] {
   const match = new RegExp(
-    `constraint ${constraint} check \\(([^;]*?)\\),?\\n\\s*(?:constraint|\\))`,
+    `constraint ${constraint} check \\(([^;]*?)\\),?\\r?\\n\\s*(?:constraint|\\))`,
     's',
   ).exec(statements);
   if (!match?.[1]) throw new Error(`constraint ${constraint} not found`);
